@@ -15,7 +15,7 @@ yb_bash_common_set_version() {
     return
   fi
   pushd "$YB_BASH_COMMON_ROOT"
-  local ref_name=$YB_BASH_COMMON_VERSION
+  local ref=$YB_BASH_COMMON_VERSION
   if ! git diff --queit "$ref"; then
     log "Trying to check out ref '$ref' in $PWD"
     if ! git checkout "$ref"; then
