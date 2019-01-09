@@ -6,7 +6,8 @@ if [[ $BASH_SOURCE == $0 ]]; then
   exit 1
 fi
 
-readonly YB_BASH_COMMON_ROOT=$( cd "${BASH_SOURCE/*}" && cd .. && pwd )
+YB_BASH_COMMON_ROOT=$( cd "${BASH_SOURCE/*}" && cd .. && pwd )
+
 yb_log_lite() {
   echo >&2 "[$( date +%Y-%m-%dT%H:%M:%S )] $*"
 }
