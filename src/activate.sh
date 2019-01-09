@@ -7,6 +7,9 @@ if [[ $BASH_SOURCE == $0 ]]; then
 fi
 
 readonly YB_BASH_COMMON_ROOT=$( cd "${BASH_SOURCE/*}" && cd .. && pwd )
+yb_log_lite() {
+  echo >&2 "[$( date +%Y-%m-%dT%H:%M:%S )] $*"
+}
 
 # Checks out the version of the yugabyte-bash-common repository defined by the
 # YB_BASH_COMMON_VERSION environment variable.
@@ -17,9 +20,9 @@ yb_bash_common_set_version() {
   pushd "$YB_BASH_COMMON_ROOT"
   local ref=$YB_BASH_COMMON_VERSION
   if ! git diff --queit "$ref"; then
-    log "Trying to check out ref '$ref' in $PWD"
+    yb_log_lite "Trying to check out ref '$ref' in $PWD"
     if ! git checkout "$ref"; then
-      log "Trying to fetch the 'origin' remote and then check out ref '$ref' in $PWD"
+      yb_log_lite "Trying to fetch the 'origin' remote and then check out ref '$ref' in $PWD"
       git fetch origin
       # If this fails, we bail out.
       git checkout "$YB_BASH_COMMON_VERSION"
