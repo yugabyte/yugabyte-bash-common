@@ -541,26 +541,6 @@ set_java_home() {
   put_path_entry_first "$JAVA_HOME/bin"
 }
 
-# Checks out the version of the yugabyte-bash-common repository defined by the
-# YB_BASH_COMMON_VERSION environment variable.
-yb_bash_common_set_version() {
-  if [[ -z ${YB_BASH_COMMON_VERSION:-} ]]; then
-    return
-  fi
-  pushd "$YB_BASH_COMMON_ROOT"
-  local ref_name=$YB_BASH_COMMON_VERSION
-  if ! git diff --queit "$ref"; then
-    log "Trying to check out ref '$ref' in $PWD"
-    if ! git checkout "$ref"; then
-      log "Trying to fetch the 'origin'i remote and then check out ref '$ref' in $PWD"
-      git fetch origin
-      # If this fails, we bail out.
-      git checkout "$YB_BASH_COMMON_VERSION"
-    fi
-  fi
-  popd
-}
-
 # -------------------------------------------------------------------------------------------------
 # Initialization
 # -------------------------------------------------------------------------------------------------
