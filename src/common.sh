@@ -13,8 +13,6 @@
 # under the License.
 #
 
-# This is common between build and test scripts.
-
 set -euo pipefail
 
 if [[ $BASH_SOURCE == $0 ]]; then
@@ -161,8 +159,8 @@ expect_some_args() {
 # of arguments, but each argument is further broken down into components separated by whitespace,
 # and those components are treated as separate possible values. Empty values are ignored.
 make_regex_from_list() {
+  expect_num_args 1 "$@"
   local list_var_name=$1
-  expect_some_args "$@"
   local regex=""
   local list_var_name_full="$list_var_name[@]"
   for item in "${!list_var_name_full}"; do
