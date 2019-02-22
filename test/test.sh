@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
 cd "${BASH_SOURCE%/*}"
-. ../src/common.sh
+. ../src/yugabyte-bash-common.sh
 
 declare -i num_assertions_succeeded=0
 declare -i num_assertions_failed=0
