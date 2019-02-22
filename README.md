@@ -1,10 +1,10 @@
 # yugabyte-bash-common
 
-A common set of scripts in Bash to be used across YugaByte's repositories, e.g. as part of build
-scripts, etc.
+A common set of functionality in Bash to be used across YugaByte's repositories, e.g. as part of
+build scripts, etc. Could also be used in other projects.
 
 
-## Using
+## Using this library in your project
 
 First, in another project's git repository:
 ```bash
