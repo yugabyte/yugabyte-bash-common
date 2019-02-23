@@ -580,8 +580,9 @@ yb_activate_virtualenv() {
     requirements_path=$frozen_requirements_path
   fi
   if [[ -f $requirements_path ]]; then
+    # Don't fail if every output line from pip is of the "Requirements already satisfied" form.
     "$venv_dir"/bin/pip install -r "$requirements_path" | \
-        egrep -v '^Requirement already satisfied: '
+        egrep -v '^Requirement already satisfied: ' || true
   else
     log "Warning: no requirements.txt or requirements_frozen.txt found at $top_dir"
   fi
