@@ -560,6 +560,9 @@ yb_deactivate_virtualenv() {
 yb_activate_virtualenv() {
   expect_num_args 1 "$@"
   local top_dir=$1
+  if [[ ! -d $top_dir ]]; then
+    fatal "Top-level directory to create a virtualenv subdirectory in does not exist: $top_dir"
+  fi
   local venv_dir=$top_dir/venv
   if [[ ! -d $venv_dir ]]; then
     yb_deactivate_virtualenv
@@ -577,7 +580,8 @@ yb_activate_virtualenv() {
     requirements_path=$frozen_requirements_path
   fi
   if [[ -f $requirements_path ]]; then
-    "$venv_dir"/bin/pip install -r "$requirements_path"
+    "$venv_dir"/bin/pip install -r "$requirements_path" | \
+        egrep -v '^Requirement already satisfied: '
   else
     log "Warning: no requirements.txt or requirements_frozen.txt found at $top_dir"
   fi
