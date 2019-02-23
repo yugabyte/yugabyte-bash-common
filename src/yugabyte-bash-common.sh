@@ -30,6 +30,9 @@ readonly NO_COLOR="\033[0m"
 # http://stackoverflow.com/questions/5349718/how-can-i-repeat-a-character-in-bash
 readonly HORIZONTAL_LINE=$( printf '=%.0s' {1..80} )
 
+# This could be switched to e.g. python3 or a Python interpreter in a specific location.
+yb_python_interpeter=python2.7
+
 # -------------------------------------------------------------------------------------------------
 # Logging and stack traces
 # -------------------------------------------------------------------------------------------------
@@ -537,6 +540,40 @@ set_java_home() {
   fi
   export JAVA_HOME=$new_java_home
   put_path_entry_first "$JAVA_HOME/bin"
+}
+
+run_python() {
+  "$yb_python_interpreter" "$@"
+}
+
+yb_deactivate_virtualenv() {
+  if [[ -n ${VIRTUAL_ENV:-} ]]; then
+    remove_path_entry "$VIRTUAL_ENV/bin"
+    unset PYTHONPATH
+  fi
+}
+
+yb_activate_virtualenv() {
+  expect_num_args 1 "$@"
+  local top_dir=$1
+  local python_interpreter=$2
+  local venv_dir=$top_dir/venv
+  if [[ ! -d $venv_dir ]]; then
+    yb_deactivate_virtualenv
+    run_python -m pip install virtualenv --user
+    run_pytnon -m virtualenv "$venv_dir"
+  fi
+
+  set +u
+  . "$venv_dir"/bin/activate
+  set -u
+
+  local requirements_path=$top_dir/requirements.txt
+  local frozen_requirements_path=$top_dir/requirements_frozen.txt
+  if [[ -f $frozen_requirements_path ]]; then
+    requirements_path=$frozen_requirements_path
+  fi
+  "$venv_dir"/bin/pip install -r "$requirements_path"
 }
 
 # -------------------------------------------------------------------------------------------------
