@@ -553,10 +553,13 @@ yb_deactivate_virtualenv() {
   fi
 }
 
+# Creates (if necessary) and activates a virtualenv at a "venv" subdirectory of the given top-level
+# directory. Also if there is a requirements_frozen.txt or a requirements.txt file in that
+# directory, installs the dependencies described by that file into the virtualenv. This opinionated
+# setup creates a common structure across multiple Python projects.
 yb_activate_virtualenv() {
   expect_num_args 1 "$@"
   local top_dir=$1
-  local python_interpreter=$2
   local venv_dir=$top_dir/venv
   if [[ ! -d $venv_dir ]]; then
     yb_deactivate_virtualenv
@@ -573,7 +576,11 @@ yb_activate_virtualenv() {
   if [[ -f $frozen_requirements_path ]]; then
     requirements_path=$frozen_requirements_path
   fi
-  "$venv_dir"/bin/pip install -r "$requirements_path"
+  if [[ -f $requirements_path ]]; then
+    "$venv_dir"/bin/pip install -r "$requirements_path"
+  else
+    log "Warning: no requirements.txt or requirements_frozen.txt found at $top_dir"
+  fi
 }
 
 # -------------------------------------------------------------------------------------------------
