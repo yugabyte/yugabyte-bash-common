@@ -564,7 +564,7 @@ yb_activate_virtualenv() {
   if [[ ! -d $venv_dir ]]; then
     yb_deactivate_virtualenv
     run_python -m pip install virtualenv --user
-    run_pytnon -m virtualenv "$venv_dir"
+    run_python -m virtualenv "$venv_dir"
   fi
 
   set +u
