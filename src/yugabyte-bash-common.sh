@@ -427,11 +427,42 @@ read_file_and_trim() {
 }
 
 detect_os() {
+  is_mac=false
+  is_linux=false
+  is_debian=false
+  is_ubuntu=false
+  is_centos=false
   short_os_name="unknown_os"
-  if is_mac; then
-    short_os_name="mac"
-  elif is_linux; then
-    short_os_name="linux"
+
+  case $OSTYPE in
+    darwin*)
+      is_mac=true
+      short_os_name="mac"
+    ;;
+    linux*)
+      is_linux=true
+      short_os_name="linux"
+    ;;
+    *)
+      fatal "Unknown operating system: $OSTYPE"
+    ;;
+  esac
+
+  if "$is_linux"; then
+    # Detect Linux flavor
+    if [[ -f /etc/issue ]]; then
+      if grep -q Ubuntu /etc/issue; then
+        is_debian=true
+        is_ubuntu=true
+        short_os_name="ubuntu"
+      elif grep -q Debian /etc/issue; then
+        is_debian=true
+        short_os_name="debian"
+      fi
+    elif [[ -f /etc/redhat-release ]] && grep CentOS /etc/redhat-release > /dev/null; then
+      is_centos=true
+      short_os_name="centos"
+    fi
   fi
 }
 
