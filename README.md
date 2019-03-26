@@ -38,7 +38,7 @@ fi
 
 The `yb_activate_virtualenv` function takes one argument, the top-level directory containing
 a `requirements.txt` or a `requirements_frozen.txt` file, and creates a virtual env called
-`venv` in that directory in case it does not already exists. Then it installs Python module
+`venv` in that directory in case it does not already exist. Then it installs Python module
 described by `requirements_frozen.txt` (if exists) or `requirements.txt` into that `venv`
 virtualenv.
 
