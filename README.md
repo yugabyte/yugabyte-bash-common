@@ -32,6 +32,44 @@ fi
 
 ```
 
+## Functions
+
+### `yb_activate_virtualenv`
+
+The `yb_activate_virtualenv` function takes one argument, the top-level directory containing
+a `requirements.txt` or a `requirements_frozen.txt` file, and creates a virtual env called
+`venv` in that directory in case it does not already exists. Then it installs Python module
+described by `requirements_frozen.txt` (if exists) or `requirements.txt` into that `venv`
+virtualenv.
+
+For a repository containing just one top-level Python project it would usually be invoked
+like this from a `common.sh` script:
+
+```bash
+# Assuming my_project_root is set as above
+yb_activate_virtualenv "$my_project_root"
+```
+
+For multiple Python projects in one repository, this function could be invoked like so:
+
+```bash
+yb_activate_virtualenv "$my_project_root/python_project_foo"
+```
+
+In case the virtualenv is already present and up-to-date, this function is very fast, so
+it could be invoked in wrapper scripts. E.g. suppose we have wrapper script `bin/my_tool`
+for a Python tool whose source is located in `python/my_package/my_tool.py`. Then
+the `bin/my_tool` wrapper script could be as follows:
+
+```bash
+#!/usr/bin/env bash
+. "${BASH_SOURCE%/*}/common.sh"
+yb_activate_virtualenv "$my_project_root"
+export PYTHONPATH=$my_project_root/python:$PYTHONPATH
+yb_activate_virtualenv "$my_project_root"
+. "$my_project_root/python/my_package/my_tool.py" "$@"
+```
+
 # Copyright
 
 Copyright (c) YugaByte, Inc.
