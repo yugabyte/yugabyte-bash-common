@@ -1,5 +1,11 @@
+language: python
+
 os:
   - linux
   - osx
 
-script: echo Hello
+python:
+  - "2.7"
+  - "3.7"
+
+script: test/test.sh
