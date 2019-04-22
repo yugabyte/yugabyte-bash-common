@@ -28,7 +28,7 @@ if [[ ! -d $my_project_root/yugabyte-bash-common ]]; then
   git submodule update
 fi
 
-. "$my_project_root"/src/yugabyte-bash-common.sh
+. "$my_project_root"/yugabyte-bash-common/src/yugabyte-bash-common.sh
 
 ```
 
