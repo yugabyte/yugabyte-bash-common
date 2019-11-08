@@ -93,7 +93,10 @@ detect_os() {
 
   if "$is_linux"; then
     # Detect Linux flavor
-    if [[ -f /etc/issue ]]; then
+    if [[ -f /etc/redhat-release ]] && grep CentOS /etc/redhat-release > /dev/null; then
+      is_centos=true
+      short_os_name="centos"
+    elif [[ -f /etc/issue ]]; then
       if grep -q Ubuntu /etc/issue; then
         is_debian=true
         is_ubuntu=true
@@ -102,9 +105,6 @@ detect_os() {
         is_debian=true
         short_os_name="debian"
       fi
-    elif [[ -f /etc/redhat-release ]] && grep CentOS /etc/redhat-release > /dev/null; then
-      is_centos=true
-      short_os_name="centos"
     fi
   fi
 
@@ -121,6 +121,14 @@ is_linux() {
 
 is_centos() {
   [[ $is_centos == "true" ]]
+}
+
+is_ubuntu() {
+  [[ $is_ubuntu == "true" ]]
+}
+
+is_debian() {
+  [[ $is_debian == "true" ]]
 }
 
 # Detect if we're running on Google Compute Platform. We perform this check lazily as there might be
