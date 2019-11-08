@@ -32,6 +32,174 @@ readonly HORIZONTAL_LINE=$( printf '=%.0s' {1..80} )
 
 # This could be switched to e.g. python3 or a Python interpreter in a specific location.
 yb_python_interpeter=python2.7
+yb_os_detected=false
+
+# -------------------------------------------------------------------------------------------------
+# Git related
+# -------------------------------------------------------------------------------------------------
+
+# Returns current git SHA1 in the variable current_git_sha1.
+get_current_git_sha1() {
+  current_git_sha1=$( git rev-parse HEAD )
+  if [[ ! $current_git_sha1 =~ ^[0-9a-f]{40}$ ]]; then
+    fatal "Could not get current git SHA1 in $PWD, got: $current_git_sha1"
+  fi
+}
+
+# -------------------------------------------------------------------------------------------------
+# OS, CPU count, and cloud environment detection
+# -------------------------------------------------------------------------------------------------
+
+detect_num_cpus() {
+  if [[ ! ${YB_NUM_CPUS:-} =~ ^[0-9]+$ ]]; then
+    if is_linux; then
+      YB_NUM_CPUS=$(grep -c processor /proc/cpuinfo)
+    elif is_mac; then
+      YB_NUM_CPUS=$(sysctl -n hw.ncpu)
+    else
+      fatal "Don't know how to detect the number of CPUs on OS $OSTYPE."
+    fi
+
+    if [[ ! $YB_NUM_CPUS =~ ^[0-9]+$ ]]; then
+      fatal "Invalid number of CPUs detected: '$YB_NUM_CPUS' (expected a number)."
+    fi
+  fi
+}
+
+detect_os() {
+  if "$yb_os_detected"; then
+    return
+  fi
+  is_mac=false
+  is_linux=false
+  is_debian=false
+  is_ubuntu=false
+  is_centos=false
+  short_os_name="unknown_os"
+
+  case $OSTYPE in
+    darwin*)
+      is_mac=true
+      short_os_name="mac"
+    ;;
+    linux*)
+      is_linux=true
+      short_os_name="linux"
+    ;;
+    *)
+      fatal "Unknown operating system: $OSTYPE"
+    ;;
+  esac
+
+  if "$is_linux"; then
+    # Detect Linux flavor
+    if [[ -f /etc/issue ]]; then
+      if grep -q Ubuntu /etc/issue; then
+        is_debian=true
+        is_ubuntu=true
+        short_os_name="ubuntu"
+      elif grep -q Debian /etc/issue; then
+        is_debian=true
+        short_os_name="debian"
+      fi
+    elif [[ -f /etc/redhat-release ]] && grep CentOS /etc/redhat-release > /dev/null; then
+      is_centos=true
+      short_os_name="centos"
+    fi
+  fi
+
+  readonly yb_os_detected=true
+}
+
+is_mac() {
+  [[ $OSTYPE =~ ^darwin ]]
+}
+
+is_linux() {
+  [[ $OSTYPE =~ ^linux ]]
+}
+
+is_centos() {
+  [[ $is_centos == "true" ]]
+}
+
+# Detect if we're running on Google Compute Platform. We perform this check lazily as there might be
+# a bit of a delay resolving the domain name.
+detect_gcp() {
+  # How to detect if we're running on Google Compute Engine:
+  # https://cloud.google.com/compute/docs/instances/managing-instances#dmi
+  if [[ -n ${YB_PRETEND_WE_ARE_ON_GCP:-} ]] || \
+     curl metadata.google.internal --silent --output /dev/null --connect-timeout 1; then
+    readonly is_running_on_gcp_exit_code=0  # "true" exit code
+  else
+    readonly is_running_on_gcp_exit_code=1  # "false" exit code
+  fi
+}
+
+is_running_on_gcp() {
+  if [[ -z ${is_running_on_gcp_exit_code:-} ]]; then
+    detect_gcp
+  fi
+  return "$is_running_on_gcp_exit_code"
+}
+
+# -------------------------------------------------------------------------------------------------
+# Wrappers for common UNIX utilities
+# -------------------------------------------------------------------------------------------------
+
+# sed -i works differently on Linux vs macOS.
+sed_i() {
+  if is_mac; then
+    sed -i "" "$@"
+  else
+    sed -i "$@"
+  fi
+}
+
+to_lowercase() {
+  tr A-Z a-z
+}
+
+# For each file provided as an argument, gzip the given file if it exists and is not already
+# compressed.
+gzip_if_exists() {
+  local f
+  for f in "$@"; do
+    if [[ -f $f && $f != *.gz && $f != *.bz2 ]]; then
+      gzip "$f"
+    fi
+  done
+}
+
+# -------------------------------------------------------------------------------------------------
+# pushd/popd wrappers
+# -------------------------------------------------------------------------------------------------
+
+# Make pushd and popd quiet.
+# http://stackoverflow.com/questions/25288194/dont-display-pushd-popd-stack-accross-several-bash-scripts-quiet-pushd-popd
+pushd() {
+  local dir_name=$1
+  if [[ ! -d $dir_name ]]; then
+    fatal "Directory '$dir_name' does not exist"
+  fi
+  command pushd "$@" > /dev/null
+}
+
+popd() {
+  command popd "$@" > /dev/null
+}
+
+# -------------------------------------------------------------------------------------------------
+# Timestamps
+# -------------------------------------------------------------------------------------------------
+
+get_timestamp() {
+  date +%Y-%m-%dT%H:%M:%S
+}
+
+get_timestamp_for_filenames() {
+  date +%Y-%m-%dT%H_%M_%S
+}
 
 # -------------------------------------------------------------------------------------------------
 # Logging and stack traces
@@ -58,14 +226,6 @@ fatal() {
     print_stack_trace 2  # Exclude this line itself from the stack trace (start from 2nd line).
   fi
   exit "${yb_fatal_exit_code:-1}"
-}
-
-get_timestamp() {
-  date +%Y-%m-%dT%H:%M:%S
-}
-
-get_timestamp_for_filenames() {
-  date +%Y-%m-%dT%H_%M_%S
 }
 
 log_empty_line() {
@@ -133,6 +293,26 @@ log_with_color() {
   log "$log_color$*$NO_COLOR"
 }
 
+log_file_existence() {
+  expect_num_args 1 "$@"
+  local file_name=$1
+  if [[ -L $file_name && -f $file_name ]]; then
+    log "Symlink exists and points to a file: $file_name"
+  elif [[ -L $file_name && -d $file_name ]]; then
+    log "Symlink exists and points to a directory: $file_name"
+  elif [[ -L $file_name ]]; then
+    log "Symlink exists but it might be broken: $file_name"
+  elif [[ -f $file_name ]]; then
+    log "File exists: $file_name"
+  elif [[ -d $file_name ]]; then
+    log "Directory exists: $file_name"
+  elif [[ ! -e $file_name ]]; then
+    log "File does not exist: $file_name"
+  else
+    log "File exists but we could not determine its type: $file_name"
+  fi
+}
+
 horizontal_line() {
   echo "------------------------------------------------------------------------------------------"
 }
@@ -141,13 +321,19 @@ thick_horizontal_line() {
   echo "=========================================================================================="
 }
 
-header() {
-  echo
-  horizontal_line
-  echo "$@"
-  horizontal_line
-  echo
+debug_log_boolean_function_result() {
+  expect_num_args 1 "$@"
+  local fn_name=$1
+  if "$fn_name"; then
+    log "$fn_name is true"
+  else
+    log "$fn_name is false"
+  fi
 }
+
+# -------------------------------------------------------------------------------------------------
+# Function argument validation
+# -------------------------------------------------------------------------------------------------
 
 # Usage: expect_some_args "$@"
 # Fatals if there are no arguments.
@@ -155,6 +341,32 @@ expect_some_args() {
   local calling_func_name=${FUNCNAME[1]}
   if [[ $# -eq 0 ]]; then
     fatal "$calling_func_name expects at least one argument"
+  fi
+}
+
+# Validates the number of arguments passed to its caller. Should also be passed all the caller's
+# arguments using "$@".
+# Example:
+#   expect_num_args 1 "$@"
+expect_num_args() {
+  expect_some_args "$@"
+  local caller_expected_num_args=$1
+  local calling_func_name=${FUNCNAME[1]}
+  shift
+  if [[ $# -ne $caller_expected_num_args ]]; then
+    yb_log_quiet=false
+    local error_msg="$calling_func_name expects $caller_expected_num_args arguments, got $#."
+    if [[ $# -eq 0 ]]; then
+      error_msg+=" Check if \"\$@\" was included in the call to expect_num_args."
+    fi
+    if [[ $# -gt 0 ]]; then
+      log "Logging actual arguments to '$calling_func_name' before a fatal error (XML-style):"
+      local arg
+      for arg in "$@"; do
+        log "  - <argument>$arg</argument>"
+      done
+    fi
+    fatal "$error_msg"
   fi
 }
 
@@ -186,6 +398,10 @@ make_regexes_from_lists() {
   done
 }
 
+# -------------------------------------------------------------------------------------------------
+# Colors
+# -------------------------------------------------------------------------------------------------
+
 yellow_color() {
   echo -ne "$YELLOW_COLOR"
 }
@@ -194,21 +410,17 @@ red_color() {
   echo -ne "$RED_COLOR"
 }
 
+cyan_color() {
+  echo -ne "$CYAN_COLOR"
+}
+
 no_color() {
   echo -ne "$NO_COLOR"
 }
 
-to_lowercase() {
-  tr A-Z a-z
-}
-
-is_mac() {
-  [[ $OSTYPE =~ ^darwin ]]
-}
-
-is_linux() {
-  [[ $OSTYPE =~ ^linux ]]
-}
+# -------------------------------------------------------------------------------------------------
+# Variable validation
+# -------------------------------------------------------------------------------------------------
 
 expect_vars_to_be_set() {
   local calling_func_name=${FUNCNAME[1]}
@@ -221,31 +433,9 @@ expect_vars_to_be_set() {
   done
 }
 
-# Validates the number of arguments passed to its caller. Should also be passed all the caller's
-# arguments using "$@".
-# Example:
-#   expect_num_args 1 "$@"
-expect_num_args() {
-  expect_some_args "$@"
-  local caller_expected_num_args=$1
-  local calling_func_name=${FUNCNAME[1]}
-  shift
-  if [[ $# -ne $caller_expected_num_args ]]; then
-    yb_log_quiet=false
-    local error_msg="$calling_func_name expects $caller_expected_num_args arguments, got $#."
-    if [[ $# -eq 0 ]]; then
-      error_msg+=" Check if \"\$@\" was included in the call to expect_num_args."
-    fi
-    if [[ $# -gt 0 ]]; then
-      log "Logging actual arguments to '$calling_func_name' before a fatal error (XML-style):"
-      local arg
-      for arg in "$@"; do
-        log "  - <argument>$arg</argument>"
-      done
-    fi
-    fatal "$error_msg"
-  fi
-}
+# -------------------------------------------------------------------------------------------------
+# File/directory manipulation
+# -------------------------------------------------------------------------------------------------
 
 check_directory_exists() {
   expect_num_args 1 "$@"
@@ -283,6 +473,72 @@ mkdir_safe() {
   mkdir -p "$dir_path"
 }
 
+read_file_and_trim() {
+  expect_num_args 1 "$@"
+  local file_name=$1
+  if [[ -f $file_name ]]; then
+    cat "$file_name" | sed -e 's/^[[:space:]]*//; s/[[:space:]]*$//'
+  else
+    log "File '$file_name' does not exist"
+    return 1
+  fi
+}
+
+# -------------------------------------------------------------------------------------------------
+# SHA256 checksums
+# -------------------------------------------------------------------------------------------------
+
+run_sha256sum_on_mac() {
+  shasum --portable --algorithm 256 "$@"
+}
+
+# Output variable: sha256sum_is_correct
+verify_sha256sum() {
+  expect_num_args 2 "$@"
+  local checksum_file=$1
+  local data_file=$2
+  ensure_file_exists "$checksum_file"
+  ensure_file_exists "$data_file"
+  local expected_sha256sum=$(<"$checksum_file")
+  # Some expected checksum files also have the file name. Let's remove that.
+  if [[ $expected_sha256sum =~ ^([0-9a-f]{64})[^0-9a-f].*$ ]]; then
+    expected_sha256sum=${BASH_REMATCH[1]}
+  fi
+  if [[ ! $expected_sha256sum =~ ^[0-9a-f]{64}$ ]]; then
+    fatal "Expected checksum has wrong format: '$expected_sha256sum'" \
+          "(from '$checksum_file')"
+  fi
+  local computed_sha256sum
+  compute_sha256sum "$data_file"
+  if [[ $computed_sha256sum != $expected_sha256sum ]]; then
+    log "Incorrect checksum for '$data_file' -- expected: $expected_sha256sum," \
+         "actual: $computed_sha256sum"
+    sha256sum_is_correct=false
+  else
+    log "Checksum for '$data_file' is correct: $computed_sha256sum"
+    sha256sum_is_correct=true
+  fi
+}
+
+# Returns the result in the computed_sha256sum variable
+compute_sha256sum() {
+  computed_sha256sum=$(
+    if [[ $OSTYPE =~ darwin ]]; then
+      run_sha256sum_on_mac "$@"
+    else
+      sha256sum "$@"
+    fi | awk '{print $1}'
+  )
+  if [[ ! $computed_sha256sum =~ ^[0-9a-f]{64}$ ]]; then
+    fatal "Could not compute SHA256 checksum, got '$computed_sha256sum' which is not a valid" \
+          "SHA256 checksum. Arguments to compute_sha256sum: $*"
+  fi
+}
+
+# -------------------------------------------------------------------------------------------------
+# PATH manipulation
+# -------------------------------------------------------------------------------------------------
+
 remove_path_entry() {
   expect_num_args 1 "$@"
   local path_entry=$1
@@ -313,210 +569,9 @@ add_path_entry() {
   fi
 }
 
-# Make pushd and popd quiet.
-# http://stackoverflow.com/questions/25288194/dont-display-pushd-popd-stack-accross-several-bash-scripts-quiet-pushd-popd
-pushd() {
-  local dir_name=$1
-  if [[ ! -d $dir_name ]]; then
-    fatal "Directory '$dir_name' does not exist"
-  fi
-  command pushd "$@" > /dev/null
-}
-
-popd() {
-  command popd "$@" > /dev/null
-}
-
-detect_num_cpus() {
-  if [[ ! ${YB_NUM_CPUS:-} =~ ^[0-9]+$ ]]; then
-    if is_linux; then
-      YB_NUM_CPUS=$(grep -c processor /proc/cpuinfo)
-    elif is_mac; then
-      YB_NUM_CPUS=$(sysctl -n hw.ncpu)
-    else
-      fatal "Don't know how to detect the number of CPUs on OS $OSTYPE."
-    fi
-
-    if [[ ! $YB_NUM_CPUS =~ ^[0-9]+$ ]]; then
-      fatal "Invalid number of CPUs detected: '$YB_NUM_CPUS' (expected a number)."
-    fi
-  fi
-}
-
-run_sha256sum_on_mac() {
-  shasum --portable --algorithm 256 "$@"
-}
-
-verify_sha256sum() {
-  local common_args="--check"
-  if [[ $OSTYPE =~ darwin ]]; then
-    run_sha256sum_on_mac $common_args "$@"
-  else
-    sha256sum --quiet $common_args "$@"
-  fi
-}
-
-compute_sha256sum() {
-  (
-    if [[ $OSTYPE =~ darwin ]]; then
-      run_sha256sum_on_mac "$@"
-    else
-      sha256sum "$@"
-    fi
-  ) | awk '{print $1}'
-}
-
-# Detect if we're running on Google Compute Platform. We perform this check lazily as there might be
-# a bit of a delay resolving the domain name.
-detect_gcp() {
-  # How to detect if we're running on Google Compute Engine:
-  # https://cloud.google.com/compute/docs/instances/managing-instances#dmi
-  if [[ -n ${YB_PRETEND_WE_ARE_ON_GCP:-} ]] || \
-     curl metadata.google.internal --silent --output /dev/null --connect-timeout 1; then
-    readonly is_running_on_gcp_exit_code=0  # "true" exit code
-  else
-    readonly is_running_on_gcp_exit_code=1  # "false" exit code
-  fi
-}
-
-is_running_on_gcp() {
-  if [[ -z ${is_running_on_gcp_exit_code:-} ]]; then
-    detect_gcp
-  fi
-  return "$is_running_on_gcp_exit_code"
-}
-
-# For each file provided as an argument, gzip the given file if it exists and is not already
-# compressed.
-gzip_if_exists() {
-  local f
-  for f in "$@"; do
-    if [[ -f $f && $f != *.gz && $f != *.bz2 ]]; then
-      gzip "$f"
-    fi
-  done
-}
-
-# This is used for escaping command lines for remote execution.
-# From StackOverflow: https://goo.gl/sTKReB
-# Using this approach: "Put the whole string in single quotes. This works for all chars except
-# single quote itself. To escape the single quote, close the quoting before it, insert the single
-# quote, and re-open the quoting."
-#
-escape_cmd_line() {
-  escape_cmd_line_rv=""
-  for arg in "$@"; do
-    escape_cmd_line_rv+=" '"${arg/\'/\'\\\'\'}"'"
-    # This should be equivalent to the sed command below.  The quadruple backslash encodes one
-    # backslash in the replacement string. We don't need that in the pure-bash implementation above.
-    # sed -e "s/'/'\\\\''/g; 1s/^/'/; \$s/\$/'/"
-  done
-  # Remove the leading space if necessary.
-  escape_cmd_line_rv=${escape_cmd_line_rv# }
-}
-
-read_file_and_trim() {
-  expect_num_args 1 "$@"
-  local file_name=$1
-  if [[ -f $file_name ]]; then
-    cat "$file_name" | sed -e 's/^[[:space:]]*//; s/[[:space:]]*$//'
-  else
-    log "File '$file_name' does not exist"
-    return 1
-  fi
-}
-
-detect_os() {
-  is_mac=false
-  is_linux=false
-  is_debian=false
-  is_ubuntu=false
-  is_centos=false
-  short_os_name="unknown_os"
-
-  case $OSTYPE in
-    darwin*)
-      is_mac=true
-      short_os_name="mac"
-    ;;
-    linux*)
-      is_linux=true
-      short_os_name="linux"
-    ;;
-    *)
-      fatal "Unknown operating system: $OSTYPE"
-    ;;
-  esac
-
-  if "$is_linux"; then
-    # Detect Linux flavor
-    if [[ -f /etc/issue ]]; then
-      if grep -q Ubuntu /etc/issue; then
-        is_debian=true
-        is_ubuntu=true
-        short_os_name="ubuntu"
-      elif grep -q Debian /etc/issue; then
-        is_debian=true
-        short_os_name="debian"
-      fi
-    elif [[ -f /etc/redhat-release ]] && grep CentOS /etc/redhat-release > /dev/null; then
-      is_centos=true
-      short_os_name="centos"
-    fi
-  fi
-}
-
-validate_numeric_arg_range() {
-  expect_num_args 4 "$@"
-  local arg_name=$1
-  local arg_value=$2
-  local -r -i min_value=$3
-  local -r -i max_value=$4
-  if [[ ! $arg_value =~ ^[0-9]+$ ]]; then
-    fatal "Invalid numeric argument value for --$arg_name: '$arg_value'"
-  fi
-  if [[ $arg_value -lt $min_value || $arg_value -gt $max_value ]]; then
-    fatal "Value out of range for --$arg_name: $arg_value, must be between $min_value and" \
-          "$max_value."
-  fi
-}
-
-log_file_existence() {
-  expect_num_args 1 "$@"
-  local file_name=$1
-  if [[ -L $file_name && -f $file_name ]]; then
-    log "Symlink exists and points to a file: $file_name"
-  elif [[ -L $file_name && -d $file_name ]]; then
-    log "Symlink exists and points to a directory: $file_name"
-  elif [[ -L $file_name ]]; then
-    log "Symlink exists but it might be broken: $file_name"
-  elif [[ -f $file_name ]]; then
-    log "File exists: $file_name"
-  elif [[ -d $file_name ]]; then
-    log "Directory exists: $file_name"
-  elif [[ ! -e $file_name ]]; then
-    log "File does not exist: $file_name"
-  else
-    log "File exists but we could not determine its type: $file_name"
-  fi
-}
-
-# Returns current git SHA1 in the variable current_git_sha1.
-get_current_git_sha1() {
-  current_git_sha1=$( git rev-parse HEAD )
-  if [[ ! $current_git_sha1 =~ ^[0-9a-f]{40}$ ]]; then
-    fatal "Could not get current git SHA1 in $PWD, got: $current_git_sha1"
-  fi
-}
-
-# sed -i works differently on Linux vs macOS.
-sed_i() {
-  if is_mac; then
-    sed -i "" "$@"
-  else
-    sed -i "$@"
-  fi
-}
+# -------------------------------------------------------------------------------------------------
+# Retry loops
+# -------------------------------------------------------------------------------------------------
 
 run_with_retries() {
   if [[ $# -lt 2 ]]; then
@@ -544,15 +599,9 @@ run_with_retries() {
   fatal "Failed to execute command after $max_attempts attempts: $*"
 }
 
-debug_log_boolean_function_result() {
-  expect_num_args 1 "$@"
-  local fn_name=$1
-  if "$fn_name"; then
-    log "$fn_name is true"
-  else
-    log "$fn_name is false"
-  fi
-}
+# -------------------------------------------------------------------------------------------------
+# Java support
+# -------------------------------------------------------------------------------------------------
 
 set_java_home() {
   if ! is_mac; then
@@ -572,6 +621,10 @@ set_java_home() {
   export JAVA_HOME=$new_java_home
   put_path_entry_first "$JAVA_HOME/bin"
 }
+
+# -------------------------------------------------------------------------------------------------
+# Python and virtualenv support
+# -------------------------------------------------------------------------------------------------
 
 run_python() {
   "$yb_python_interpreter" "$@"
