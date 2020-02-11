@@ -639,8 +639,18 @@ run_python() {
 }
 
 yb_deactivate_virtualenv() {
-  if [[ -n ${VIRTUAL_ENV:-} ]]; then
-    remove_path_entry "$VIRTUAL_ENV/bin"
+  if [[ -n ${VIRTUAL_ENV:-} && -f "$VIRTUAL_ENV/bin/activate" ]]; then
+    local _old_virtual_env_dir=$VIRTUAL_ENV
+    set +u
+    # Ensure we properly "activate" the virtualenv and import all its Bash functions.
+    . "$VIRTUAL_ENV/bin/activate"
+    # The "deactivate" function is defined by virtualenv's "activate" script.
+    deactivate
+    set -u
+
+    # The deactivate function does not remove virtualenv's bin path from PATH (as of 02/11/2020),
+    # do it ourselves.
+    remove_path_entry "$_old_virtual_env_dir/bin"
     unset PYTHONPATH
   fi
 }
@@ -656,8 +666,8 @@ yb_activate_virtualenv() {
     fatal "Top-level directory to create a virtualenv subdirectory in does not exist: $top_dir"
   fi
   local venv_dir=$top_dir/venv
+  yb_deactivate_virtualenv
   if [[ ! -d $venv_dir ]]; then
-    yb_deactivate_virtualenv
     run_python -m pip install virtualenv --user
     run_python -m virtualenv "$venv_dir"
   fi
