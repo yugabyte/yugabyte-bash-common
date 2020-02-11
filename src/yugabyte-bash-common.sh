@@ -639,7 +639,7 @@ run_python() {
 }
 
 yb_deactivate_virtualenv() {
-  if [[ -n ${VIRTUAL_ENV:-} ]] && [[ -f "$VIRTUAL_ENV/bin/activate" ]]; then
+  if [[ -n ${VIRTUAL_ENV:-} && -f "$VIRTUAL_ENV/bin/activate" ]]; then
     local _old_virtual_env_dir=$VIRTUAL_ENV
     set +u
     # Ensure we properly "activate" the virtualenv and import all its Bash functions.
@@ -648,7 +648,7 @@ yb_deactivate_virtualenv() {
     deactivate
     set -u
 
-    # The deactivate function does not remove virtualenv's bin path from PATH (as of 09/26/2016),
+    # The deactivate function does not remove virtualenv's bin path from PATH (as of 02/11/2020),
     # do it ourselves.
     remove_path_entry "$_old_virtual_env_dir/bin"
     unset PYTHONPATH
