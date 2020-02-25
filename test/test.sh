@@ -2,7 +2,8 @@
 
 set -euo pipefail
 cd "${BASH_SOURCE%/*}"
-. ../src/yugabyte-bash-common.sh
+# shellcheck source=src/yugabyte-bash-common.sh
+. "../src/yugabyte-bash-common.sh"
 
 declare -i num_assertions_succeeded=0
 declare -i num_assertions_failed=0
@@ -19,13 +20,13 @@ cleanup() {
 }
 
 increment_successful_assertions() {
-  let num_assertions_succeeded+=1
-  let num_assertions_succeeded_in_current_test+=1
+  (( num_assertions_succeeded+=1 ))
+  (( num_assertions_succeeded_in_current_test+=1 ))
 }
 
 increment_failed_assertions() {
-  let num_assertions_failed+=1
-  let num_assertions_failed_in_current_test+=1
+  (( num_assertions_failed+=1 ))
+  (( num_assertions_failed_in_current_test+=1 ))
 }
 
 assert_equals() {
@@ -37,7 +38,7 @@ assert_equals() {
   fi
   local expected=$1
   local actual=$2
-  if [[ $expected == $actual ]]; then
+  if [[ $expected == "$actual" ]]; then
     increment_successful_assertions
   else
     echo "Assertion failed: expected '$expected', got '$actual'" >&2
@@ -89,6 +90,7 @@ yb_test_sha256sum() {
   echo "$expected_sha256sum  myfile.txt" >"$checksum_file_path"
   assert_equals "true" "$sha256sum_is_correct"
 
+  log "The 'Incorrect checksum' message below is OK."
   local wrong_sha256sum="cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ed"
   local wrong_checksum_file_path="$checksum_file_path.wrong"
   echo "$wrong_sha256sum" >"$wrong_checksum_file_path"
@@ -98,6 +100,22 @@ yb_test_sha256sum() {
 
 # -------------------------------------------------------------------------------------------------
 # Main test runner code
+
+cd "$YB_BASH_COMMON_ROOT"
+
+if command -v shellcheck >/dev/null; then
+  # https://github.com/koalaman/shellcheck/wiki/SC2207
+  # This has to work on Bash 3.x as well.
+  shell_scripts=()
+  while IFS='' read -r shell_script; do shell_scripts+=( "$shell_script"); done < <(
+    find . -name "*.sh" -type f
+  )
+
+  for shell_script in "${shell_scripts[@]}"; do
+    log "Checking script $shell_script"
+    shellcheck -x "$shell_script"
+  done
+fi
 
 TEST_TMPDIR=/tmp/yugabyte-bash-common-test.$$.$RANDOM.$RANDOM.$RANDOM
 mkdir -p "$TEST_TMPDIR"

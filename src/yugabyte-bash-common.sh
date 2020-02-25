@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 #@IgnoreInspection BashAddShebang
 
 # Copyright (c) YugaByte, Inc.
@@ -15,23 +17,32 @@
 
 set -euo pipefail
 
-if [[ $BASH_SOURCE == $0 ]]; then
-  echo "$BASH_SOURCE must be sourced, not executed" >&2
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  echo "${BASH_SOURCE[0]} must be sourced, not executed" >&2
   exit 1
 fi
 
+# shellcheck disable=SC2034
 readonly YB_BASH_COMMON_ROOT=$( cd "${BASH_SOURCE/*}" && cd .. && pwd )
 
+# shellcheck disable=SC2034
 readonly YELLOW_COLOR="\033[0;33m"
+
+# shellcheck disable=SC2034
 readonly RED_COLOR="\033[0;31m"
+
+# shellcheck disable=SC2034
 readonly CYAN_COLOR="\033[0;36m"
+
+# shellcheck disable=SC2034
 readonly NO_COLOR="\033[0m"
 
+# shellcheck disable=SC2034
 # http://stackoverflow.com/questions/5349718/how-can-i-repeat-a-character-in-bash
 readonly HORIZONTAL_LINE=$( printf '=%.0s' {1..80} )
 
 # This could be switched to e.g. python3 or a Python interpreter in a specific location.
-yb_python_interpeter=python2.7
+yb_python_interpreter=python2.7
 yb_os_detected=false
 
 # -------------------------------------------------------------------------------------------------
@@ -79,6 +90,7 @@ detect_os() {
 
   case $OSTYPE in
     darwin*)
+      # shellcheck disable=SC2034
       is_mac=true
       short_os_name="mac"
     ;;
@@ -102,7 +114,9 @@ detect_os() {
         is_ubuntu=true
         short_os_name="ubuntu"
       elif grep -q Debian /etc/issue; then
+        # shellcheck disable=SC2034
         is_debian=true
+        # shellcheck disable=SC2034
         short_os_name="debian"
       fi
     fi
@@ -165,7 +179,7 @@ sed_i() {
 }
 
 to_lowercase() {
-  tr A-Z a-z
+  tr '[:upper:]' '[:lower:]'
 }
 
 # For each file provided as an argument, gzip the given file if it exists and is not already
@@ -218,7 +232,7 @@ print_stack_trace() {
   echo "Stack trace:" >&2
   while [[ $i -lt "${#FUNCNAME[@]}" ]]; do
     echo "  ${BASH_SOURCE[$i]}:${BASH_LINENO[$((i - 1))]} ${FUNCNAME[$i]}" >&2
-    let i+=1
+    (( i+=1 ))
   done
 }
 
@@ -288,8 +302,9 @@ log() {
   #
   # Our experience is that FUNCNAME indexes exactly match those of BASH_SOURCE.
   local stack_idx0=${yb_log_skip_top_frames:-0}
-  local stack_idx1=$(( $stack_idx0 + 1 ))
+  local stack_idx1=$(( stack_idx0 + 1 ))
 
+  # shellcheck disable=SC2048,SC2086
   echo "[$( get_timestamp )" \
        "${BASH_SOURCE[$stack_idx1]##*/}:${BASH_LINENO[$stack_idx0]}" \
        "${FUNCNAME[$stack_idx1]}]" $* >&2
@@ -385,7 +400,7 @@ make_regex_from_list() {
   expect_num_args 1 "$@"
   local list_var_name=$1
   local regex=""
-  local list_var_name_full="$list_var_name[@]"
+  local list_var_name_full="${list_var_name[*]}"
   for item in "${!list_var_name_full}"; do
     if [[ -z $item ]]; then
       continue
@@ -436,7 +451,7 @@ expect_vars_to_be_set() {
   for var_name in "$@"; do
     if [[ -z ${!var_name:-} ]]; then
       fatal "The '$var_name' variable must be set by the caller of $calling_func_name." \
-            "$calling_func_name expects the following variables to be set: $@."
+            "$calling_func_name expects the following variables to be set: $*."
     fi
   done
 }
@@ -485,7 +500,7 @@ read_file_and_trim() {
   expect_num_args 1 "$@"
   local file_name=$1
   if [[ -f $file_name ]]; then
-    cat "$file_name" | sed -e 's/^[[:space:]]*//; s/[[:space:]]*$//'
+    sed -e 's/^[[:space:]]*//; s/[[:space:]]*$//' <"$file_name"
   else
     log "File '$file_name' does not exist"
     return 1
@@ -507,7 +522,8 @@ verify_sha256sum() {
   local data_file=$2
   ensure_file_exists "$checksum_file"
   ensure_file_exists "$data_file"
-  local expected_sha256sum=$(<"$checksum_file")
+  local expected_sha256sum
+  expected_sha256sum=$(<"$checksum_file")
   # Some expected checksum files also have the file name. Let's remove that.
   if [[ $expected_sha256sum =~ ^([0-9a-f]{64})[^0-9a-f].*$ ]]; then
     expected_sha256sum=${BASH_REMATCH[1]}
@@ -518,12 +534,14 @@ verify_sha256sum() {
   fi
   local computed_sha256sum
   compute_sha256sum "$data_file"
-  if [[ $computed_sha256sum != $expected_sha256sum ]]; then
+  if [[ $computed_sha256sum != "$expected_sha256sum" ]]; then
     log "Incorrect checksum for '$data_file' -- expected: $expected_sha256sum," \
          "actual: $computed_sha256sum"
+    # shellcheck disable=SC2034
     sha256sum_is_correct=false
   else
     log "Checksum for '$data_file' is correct: $computed_sha256sum"
+    # shellcheck disable=SC2034
     sha256sum_is_correct=true
   fi
 }
@@ -552,12 +570,30 @@ remove_path_entry() {
   local path_entry=$1
   local prev_path=""
   # Remove all occurrences of the given entry.
-  while [[ $PATH != $prev_path ]]; do
+  while [[ $PATH != "$prev_path" ]]; do
     prev_path=$PATH
     PATH=:$PATH:
     PATH=${PATH//:$path_entry:/:}
     PATH=${PATH#:}
     PATH=${PATH%:}
+  done
+  export PATH
+}
+
+# This is used for escaping command lines for remote execution.
+# From StackOverflow: https://goo.gl/sTKReB
+# Using this approach: "Put the whole string in single quotes. This works for all chars except
+# single quote itself. To escape the single quote, close the quoting before it, insert the single
+# quote, and re-open the quoting."
+#
+escape_cmd_line() {
+  escape_cmd_line_rv=""
+  for arg in "$@"; do
+    # shellcheck disable=SC2027
+    escape_cmd_line_rv+=" '"${arg/\'/\'\\\'\'}"'"
+    # This should be equivalent to the sed command below.  The quadruple backslash encodes one
+    # backslash in the replacement string. We don't need that in the pure-bash implementation above.
+    # sed -e "s/'/'\\\\''/g; 1s/^/'/; \$s/\$/'/"
   done
   export PATH
 }
@@ -601,7 +637,8 @@ run_with_retries() {
     fi
     log "Warning: command failed with exit code $exit_code at attempt $attempt_index: $*." \
         "Waiting for $delay_sec sec, will then re-try for up to $max_attempts attempts."
-    let attempt_index+=1
+    # shellcheck disable=SC2034
+    (( attempt_index+=1 ))
     sleep "$delay_sec"
   done
   fatal "Failed to execute command after $max_attempts attempts: $*"
@@ -617,11 +654,12 @@ set_java_home() {
   fi
   # macOS has a peculiar way of setting JAVA_HOME
   local cmd_to_get_java_home="/usr/libexec/java_home --version 1.8"
-  local new_java_home=$( $cmd_to_get_java_home )
+  local new_java_home
+  new_java_home=$( $cmd_to_get_java_home )
   if [[ ! -d $new_java_home ]]; then
     fatal "Directory returned by '$cmd_to_get_java_home' does not exist: $new_java_home"
   fi
-  if [[ -n ${JAVA_HOME:-} && $JAVA_HOME != $new_java_home ]]; then
+  if [[ -n ${JAVA_HOME:-} && $JAVA_HOME != "$new_java_home" ]]; then
     log "Warning: updating JAVA_HOME from $JAVA_HOME to $new_java_home"
   else
     log "Setting JAVA_HOME: $new_java_home"
@@ -643,6 +681,7 @@ yb_deactivate_virtualenv() {
     local _old_virtual_env_dir=$VIRTUAL_ENV
     set +u
     # Ensure we properly "activate" the virtualenv and import all its Bash functions.
+    # shellcheck disable=SC1090
     . "$VIRTUAL_ENV/bin/activate"
     # The "deactivate" function is defined by virtualenv's "activate" script.
     deactivate
@@ -673,6 +712,7 @@ yb_activate_virtualenv() {
   fi
 
   set +u
+  # shellcheck disable=SC1090
   . "$venv_dir"/bin/activate
   set -u
 
@@ -684,7 +724,7 @@ yb_activate_virtualenv() {
   if [[ -f $requirements_path ]]; then
     # Don't fail if every output line from pip is of the "Requirements already satisfied" form.
     "$venv_dir"/bin/pip install -r "$requirements_path" | \
-        egrep -v '^Requirement already satisfied: ' || true
+        grep -Ev '^Requirement already satisfied: ' || true
   else
     log "Warning: no requirements.txt or requirements_frozen.txt found at $top_dir"
   fi
