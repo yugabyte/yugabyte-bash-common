@@ -367,22 +367,50 @@ expect_some_args() {
   fi
 }
 
-# Validates the number of arguments passed to its caller. Should also be passed all the caller's
+# This helps validate that the number of arguments passed to a function is within a certain range.
+# Should also be passed all the arguments.
 # arguments using "$@".
-# Example:
+# Examples:
+#   - To check is a function is passed exactly one argument:
+#
 #   expect_num_args 1 "$@"
+#
+#   - To check that the number of arguments passed to a function is within a certain range:
+#
+#   expect_num_args 1-2 "$@"
 expect_num_args() {
   expect_some_args "$@"
-  local caller_expected_num_args=$1
+  local expected_num_args=$1
+  local num_args_lower_bound
+  local num_args_upper_bound
+  if [[ $expected_num_args == *-* ]]; then
+    if [[ ! $expected_num_args =~ ^[0-9]+-[0-9]+$ ]]; then
+      fatal "Invalid range of the expected number of arguments: '$expected_num_args'"
+    fi
+    num_args_lower_bound=${1%%-*}
+    num_args_upper_bound=${1##*-}
+    if [[ $num_args_lower_bound -gt num_args_upper_bound ]]; then
+      fatal "Invalid range of the expected number of arguments (reversed lower/upper bound):" \
+            "'$expected_num_args'"
+    fi
+  else
+    num_args_lower_bound=$expected_num_args
+    num_args_upper_bound=$expected_num_args
+  fi
+
   local calling_func_name=${FUNCNAME[1]}
   shift
-  if [[ $# -ne $caller_expected_num_args ]]; then
+  if [[ $# -lt $num_args_lower_bound || $# -gt $num_args_upper_bound ]]; then
     yb_log_quiet=false
-    local error_msg="$calling_func_name expects $caller_expected_num_args arguments, got $#."
+    if [[ $num_args_lower_bound -eq $num_args_upper_bound ]]; then
+      local error_msg="$calling_func_name expects $expected_num_args arguments, got $#."
+    else
+      local error_msg=\
+"$calling_func_name expects from $num_args_lower_bound to $num_args_upper_bound arguments, got $#."
+    fi
     if [[ $# -eq 0 ]]; then
       error_msg+=" Check if \"\$@\" was included in the call to expect_num_args."
-    fi
-    if [[ $# -gt 0 ]]; then
+    else
       log "Logging actual arguments to '$calling_func_name' before a fatal error (XML-style):"
       local arg
       for arg in "$@"; do
@@ -698,9 +726,17 @@ yb_deactivate_virtualenv() {
 # directory. Also if there is a requirements_frozen.txt or a requirements.txt file in that
 # directory, installs the dependencies described by that file into the virtualenv. This opinionated
 # setup creates a common structure across multiple Python projects.
+#
+# Arguments:
+#   - Parent directory of the virtualenv
+#   - Python interpreter to use (optional)
 yb_activate_virtualenv() {
-  expect_num_args 1 "$@"
+  expect_num_args 1-2 "$@"
   local top_dir=$1
+  local python_interpreter=$yb_python_interpreter
+  if [[ $# -ge 2 ]]; then
+    yb_python_interpreter=$2
+  fi
   if [[ ! -d $top_dir ]]; then
     fatal "Top-level directory to create a virtualenv subdirectory in does not exist: $top_dir"
   fi

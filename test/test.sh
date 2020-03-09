@@ -98,6 +98,36 @@ yb_test_sha256sum() {
   assert_equals "false" "$sha256sum_is_correct"
 }
 
+assert_incorrect_num_args() {
+  local result
+  set +e
+  result=$( expect_num_args "$@" 2>&1 )
+  set -e
+  if [[ $result =~ expects\ .*\ arguments,\ got ]]; then
+    increment_successful_assertions
+  else
+    log "Unexpected output from expect_num_args $*: $result"
+    increment_failed_assertions
+  fi
+}
+
+yb_test_expect_num_args() {
+  expect_num_args 0
+  expect_num_args 1 foo
+  expect_num_args 1-2 foo
+  expect_num_args 1-3 foo
+  expect_num_args 2 foo bar
+  expect_num_args 1-2 foo bar
+  expect_num_args 2-3 foo bar
+
+  assert_incorrect_num_args 0 foo bar
+  assert_incorrect_num_args 1
+  assert_incorrect_num_args 1 foo bar
+  assert_incorrect_num_args 2
+  assert_incorrect_num_args 2 foo
+  assert_incorrect_num_args 2 foo bar baz
+}
+
 # -------------------------------------------------------------------------------------------------
 # Main test runner code
 
