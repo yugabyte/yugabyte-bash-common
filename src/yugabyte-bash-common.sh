@@ -763,7 +763,6 @@ yb_activate_virtualenv() {
   fi
   local venv_dir=$top_dir/$yb_virtualenv_basename
   yb_deactivate_virtualenv
-  log "Python major version: $python_major_version, python interpreter: $python_interpreter"
   if [[ ! -d $venv_dir ]]; then
     if [[ $python_major_version -eq 3 ]]; then
       "$python_interpreter" -m venv "$venv_dir"
