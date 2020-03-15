@@ -24,7 +24,8 @@ if [[ $BASH_SOURCE == $0 ]]; then
 fi
 
 my_project_root=$( cd "${BASH_SOURCE%/*}" && cd .. && pwd )
-if [[ ! -d $my_project_root/yugabyte-bash-common ]]; then
+if [[ ! -d $my_project_root/yugabyte-bash-common || 
+      -z "$( ls -A "$my_project_root/yugabyte-bash-common" )" ]]; then
   ( cd "$my_project_root"; git submodule update --init --recursive )
 fi
 
