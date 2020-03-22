@@ -375,13 +375,13 @@ expect_some_args() {
 # Should also be passed all the arguments.
 # arguments using "$@".
 # Examples:
-#   - To check is a function is passed exactly one argument:
+#   - To check if a function is passed exactly one argument:
 #
-#   expect_num_args 1 "$@"
+#     expect_num_args 1 "$@"
 #
 #   - To check that the number of arguments passed to a function is within a certain range:
 #
-#   expect_num_args 1-2 "$@"
+#     expect_num_args 1-2 "$@"
 expect_num_args() {
   expect_some_args "$@"
   local expected_num_args=$1
@@ -767,6 +767,7 @@ yb_activate_virtualenv() {
     if [[ $python_major_version -eq 3 ]]; then
       "$python_interpreter" -m venv "$venv_dir"
     else
+      log "Automatically installing the virtualenv module"
       "$python_interpreter" -m pip install virtualenv --user
       "$python_interpreter" -m virtualenv "$venv_dir"
     fi

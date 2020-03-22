@@ -135,7 +135,7 @@ yb_test_sha256sum() {
   echo "Data data data" >"$file_path"
   local computed_sha256sum
   compute_sha256sum "$file_path"
-  local expected_sha256sum="cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ec"
+  local expected_sha256sum=cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ec
   assert_equals "$expected_sha256sum" "$computed_sha256sum"
   local checksum_file_path=$file_path.sha256
   echo "$expected_sha256sum" >"$checksum_file_path"
@@ -147,8 +147,8 @@ yb_test_sha256sum() {
   assert_equals "true" "$sha256sum_is_correct"
 
   log "The 'Incorrect checksum' message below is OK."
-  local wrong_sha256sum="cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ed"
-  local wrong_checksum_file_path="$checksum_file_path.wrong"
+  local wrong_sha256sum=cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ed
+  local wrong_checksum_file_path=$checksum_file_path.wrong
   echo "$wrong_sha256sum" >"$wrong_checksum_file_path"
   verify_sha256sum "$wrong_checksum_file_path" "$file_path"
   assert_equals "false" "$sha256sum_is_correct"
@@ -179,14 +179,14 @@ check_virtualenv() {
   local python_interpreter=$1
   local python_version_regex=$2
   shift 2
-  local venv_parent_dir="$TEST_TMPDIR/${python_interpreter}_venv_parent_dir"
+  local venv_parent_dir=$TEST_TMPDIR/${python_interpreter}_venv_parent_dir
   mkdir -p "$venv_parent_dir"
   local requirement
   for requirement in "$@"; do
     echo "$requirement"
   done >"$venv_parent_dir/requirements.txt"
-  local pip_list_output_path="$venv_parent_dir/pip_list_output.txt"
-  local python_interpreter_path_file="$venv_parent_dir/python_interpreter_path.txt"
+  local pip_list_output_path=$venv_parent_dir/pip_list_output.txt
+  local python_interpreter_path_file=$venv_parent_dir/python_interpreter_path.txt
   (
     yb_activate_virtualenv "$venv_parent_dir" "$python_interpreter"
     pip list >"$pip_list_output_path"
@@ -204,16 +204,16 @@ check_virtualenv() {
 }
 
 yb_test_activate_virtualenv() {
-  check_virtualenv python2.7 "2[.]7[.].*" psutil
-  check_virtualenv python3 "3[.].*" requests
+  check_virtualenv python2.7 "3([.]\d+)+" psutil
+  check_virtualenv python3 "3([.]\d+)+" requests
 }
 
 check_switching_virtualenv() {
   local python_interpreter=$1
   shift
-  local venv_parent_dir1="$TEST_TMPDIR/${python_interpreter}_venv_parent_dir1"
+  local venv_parent_dir1=$TEST_TMPDIR/${python_interpreter}_venv_parent_dir1
   mkdir -p "$venv_parent_dir1"
-  local venv_parent_dir2="$TEST_TMPDIR/${python_interpreter}_venv_parent_dir2"
+  local venv_parent_dir2=$TEST_TMPDIR/${python_interpreter}_venv_parent_dir2
   mkdir -p "$venv_parent_dir2"
 
   # Only install requirements in the second virtualenv.
@@ -222,11 +222,11 @@ check_switching_virtualenv() {
     echo "$requirement"
   done >"$venv_parent_dir2/requirements.txt"
 
-  local pip_list_output_path1="$venv_parent_dir1/pip_list_output.txt"
-  local pip_list_output_path2="$venv_parent_dir2/pip_list_output.txt"
-  local pip_list_deactivated_output_path="$venv_parent_dir2/pip_list_deactivated.txt"
-  local python_interpreter_path_file1="$venv_parent_dir1/python_interpreter_path.txt"
-  local python_interpreter_path_file2="$venv_parent_dir2/python_interpreter_path.txt"
+  local pip_list_output_path1=$venv_parent_dir1/pip_list_output.txt
+  local pip_list_output_path2=$venv_parent_dir2/pip_list_output.txt
+  local pip_list_deactivated_output_path=$venv_parent_dir2/pip_list_deactivated.txt
+  local python_interpreter_path_file1=$venv_parent_dir1/python_interpreter_path.txt
+  local python_interpreter_path_file2=$venv_parent_dir2/python_interpreter_path.txt
 
   (
     yb_activate_virtualenv "$venv_parent_dir1" "$python_interpreter"
@@ -282,7 +282,7 @@ trap cleanup EXIT
 
 global_exit_code=0
 test_fn_names=$(
-  declare -F | sed 's/^declare -f //g' | grep '^yb_test_' | sort
+  declare -F | sed 's/^declare -f //' | grep '^yb_test_' | sort
 )
 
 for fn_name in $test_fn_names; do
