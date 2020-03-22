@@ -738,15 +738,16 @@ yb_deactivate_virtualenv() {
 yb_activate_virtualenv() {
   expect_num_args 1-2 "$@"
   local top_dir=$1
+  if [[ ! -d $top_dir ]]; then
+    fatal "Top-level directory to create a virtualenv subdirectory in does not exist: $top_dir"
+  fi
 
   # Use the project-wide Python interpreter by default.
   local python_interpreter=$yb_python_interpreter
   if [[ $# -ge 2 ]]; then
     python_interpreter=$2
   fi
-  if [[ ! -d $top_dir ]]; then
-    fatal "Top-level directory to create a virtualenv subdirectory in does not exist: $top_dir"
-  fi
+
   local python_interpreter_basename=${yb_python_interpreter##*/}
   declare -i python_major_version
   if [[ $python_interpreter_basename == python2.7 ]]; then
