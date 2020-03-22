@@ -45,6 +45,10 @@ readonly HORIZONTAL_LINE=$( printf '=%.0s' {1..80} )
 yb_python_interpreter=python2.7
 yb_os_detected=false
 
+# This is the name of virtual environment directories that will be created automatically inside
+# directories that contain a requirements.txt file by the yb_activate_virtualenv function.
+yb_virtualenv_basename=venv
+
 # -------------------------------------------------------------------------------------------------
 # Git related
 # -------------------------------------------------------------------------------------------------
@@ -367,22 +371,50 @@ expect_some_args() {
   fi
 }
 
-# Validates the number of arguments passed to its caller. Should also be passed all the caller's
+# This helps validate that the number of arguments passed to a function is within a certain range.
+# Should also be passed all the arguments.
 # arguments using "$@".
-# Example:
-#   expect_num_args 1 "$@"
+# Examples:
+#   - To check if a function is passed exactly one argument:
+#
+#     expect_num_args 1 "$@"
+#
+#   - To check that the number of arguments passed to a function is within a certain range:
+#
+#     expect_num_args 1-2 "$@"
 expect_num_args() {
   expect_some_args "$@"
-  local caller_expected_num_args=$1
+  local expected_num_args=$1
+  local num_args_lower_bound
+  local num_args_upper_bound
+  if [[ $expected_num_args == *-* ]]; then
+    if [[ ! $expected_num_args =~ ^[0-9]+-[0-9]+$ ]]; then
+      fatal "Invalid range of the expected number of arguments: '$expected_num_args'"
+    fi
+    num_args_lower_bound=${1%%-*}
+    num_args_upper_bound=${1##*-}
+    if [[ $num_args_lower_bound -gt num_args_upper_bound ]]; then
+      fatal "Invalid range of the expected number of arguments (reversed lower/upper bound):" \
+            "'$expected_num_args'"
+    fi
+  else
+    num_args_lower_bound=$expected_num_args
+    num_args_upper_bound=$expected_num_args
+  fi
+
   local calling_func_name=${FUNCNAME[1]}
   shift
-  if [[ $# -ne $caller_expected_num_args ]]; then
+  if [[ $# -lt $num_args_lower_bound || $# -gt $num_args_upper_bound ]]; then
     yb_log_quiet=false
-    local error_msg="$calling_func_name expects $caller_expected_num_args arguments, got $#."
+    if [[ $num_args_lower_bound -eq $num_args_upper_bound ]]; then
+      local error_msg="$calling_func_name expects $expected_num_args arguments, got $#."
+    else
+      local error_msg=\
+"$calling_func_name expects from $num_args_lower_bound to $num_args_upper_bound arguments, got $#."
+    fi
     if [[ $# -eq 0 ]]; then
       error_msg+=" Check if \"\$@\" was included in the call to expect_num_args."
-    fi
-    if [[ $# -gt 0 ]]; then
+    else
       log "Logging actual arguments to '$calling_func_name' before a fatal error (XML-style):"
       local arg
       for arg in "$@"; do
@@ -694,21 +726,51 @@ yb_deactivate_virtualenv() {
   fi
 }
 
-# Creates (if necessary) and activates a virtualenv at a "venv" subdirectory of the given top-level
-# directory. Also if there is a requirements_frozen.txt or a requirements.txt file in that
-# directory, installs the dependencies described by that file into the virtualenv. This opinionated
-# setup creates a common structure across multiple Python projects.
+# Creates (if necessary) and activates a virtualenv at a subdirectory (named
+# "$yb_virtuaenv_basename") of the given top-level directory. Also if there is a
+# requirements_frozen.txt or a requirements.txt file in that directory, installs the dependencies
+# described by that file into the virtualenv. This opinionated setup creates a common structure
+# across multiple Python projects.
+#
+# Arguments:
+#   - Parent directory of the virtualenv
+#   - Python interpreter to use (optional)
 yb_activate_virtualenv() {
-  expect_num_args 1 "$@"
+  expect_num_args 1-2 "$@"
   local top_dir=$1
+
+  # Use the project-wide Python interpreter by default.
+  local python_interpreter=$yb_python_interpreter
+  if [[ $# -ge 2 ]]; then
+    python_interpreter=$2
+  fi
   if [[ ! -d $top_dir ]]; then
     fatal "Top-level directory to create a virtualenv subdirectory in does not exist: $top_dir"
   fi
-  local venv_dir=$top_dir/venv
+  local python_interpreter_basename=${yb_python_interpreter##*/}
+  declare -i python_major_version
+  if [[ $python_interpreter_basename == python2.7 ]]; then
+    python_major_version=2
+  elif [[ $python_interpreter_basename == python3 ||
+          $python_interpreter_basename == python3.* ]]; then
+    python_major_version=3
+  else
+    fatal "Unsupported Python interpreter for virtual environment creation:" \
+          "'$python_interpreter_basename'"
+  fi
+  if [[ $yb_virtualenv_basename == */* ]]; then
+    fatal "yb_virtualenv_basename includes forward slashes: '$yb_virtualenv_basename'"
+  fi
+  local venv_dir=$top_dir/$yb_virtualenv_basename
   yb_deactivate_virtualenv
   if [[ ! -d $venv_dir ]]; then
-    run_python -m pip install virtualenv --user
-    run_python -m virtualenv "$venv_dir"
+    if [[ $python_major_version -eq 3 ]]; then
+      "$python_interpreter" -m venv "$venv_dir"
+    else
+      log "Automatically installing the virtualenv module"
+      "$python_interpreter" -m pip install virtualenv --user
+      "$python_interpreter" -m virtualenv "$venv_dir"
+    fi
   fi
 
   set +u

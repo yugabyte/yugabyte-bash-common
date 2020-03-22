@@ -29,6 +29,10 @@ increment_failed_assertions() {
   (( num_assertions_failed_in_current_test+=1 ))
 }
 
+# -------------------------------------------------------------------------------------------------
+# assert_... functions
+# -------------------------------------------------------------------------------------------------
+
 assert_equals() {
   # Not using "expect_num_args", "log", "fatal", etc. in these assertion functions, because
   # those functions themselves need to be tested.
@@ -46,6 +50,22 @@ assert_equals() {
   fi
 }
 
+assert_matches_regex() {
+  if [[ $# -ne 2 ]]; then
+    echo "assert_matches_regex expects two arguments, got $#: $*" >&2
+    exit 1
+  fi
+  local expected_pattern=$1
+  local actual=$2
+  if [[ $actual =~ $expected_pattern ]]; then
+    increment_successful_assertions
+  else
+    echo "Assertion failed: expected '$actual' to match pattern '$expected_pattern'" >&2
+    increment_failed_assertions
+  fi
+}
+
+
 assert_failure() {
   if "$@"; then
     log "Command succeeded -- NOT EXPECTED: $*"
@@ -55,6 +75,42 @@ assert_failure() {
     increment_successful_assertions
   fi
 }
+
+assert_incorrect_num_args() {
+  local result
+  set +e
+  result=$( expect_num_args "$@" 2>&1 )
+  set -e
+  if [[ $result =~ expects\ .*\ arguments,\ got ]]; then
+    increment_successful_assertions
+  else
+    log "Unexpected output from expect_num_args $*: $result"
+    increment_failed_assertions
+  fi
+}
+
+assert_egrep() {
+  if grep -Eq "$@"; then
+    increment_successful_assertions
+  else
+    log "grep -Eq $* failed"
+    increment_failed_assertions
+  fi
+}
+
+assert_egrep_no_results() {
+  if grep -Eq "$@"; then
+    log "grep -Eq $* found results:"
+    grep -E "$@" >&2
+    increment_failed_assertions
+  else
+    increment_successful_assertions
+  fi
+}
+
+# -------------------------------------------------------------------------------------------------
+# Test cases
+# -------------------------------------------------------------------------------------------------
 
 yb_test_logging() {
   assert_equals "$( log "Foo bar" 2>&1 | sed 's/.*\] //g' )" "Foo bar"
@@ -79,7 +135,7 @@ yb_test_sha256sum() {
   echo "Data data data" >"$file_path"
   local computed_sha256sum
   compute_sha256sum "$file_path"
-  local expected_sha256sum="cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ec"
+  local expected_sha256sum=cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ec
   assert_equals "$expected_sha256sum" "$computed_sha256sum"
   local checksum_file_path=$file_path.sha256
   echo "$expected_sha256sum" >"$checksum_file_path"
@@ -91,15 +147,117 @@ yb_test_sha256sum() {
   assert_equals "true" "$sha256sum_is_correct"
 
   log "The 'Incorrect checksum' message below is OK."
-  local wrong_sha256sum="cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ed"
-  local wrong_checksum_file_path="$checksum_file_path.wrong"
+  local wrong_sha256sum=cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ed
+  local wrong_checksum_file_path=$checksum_file_path.wrong
   echo "$wrong_sha256sum" >"$wrong_checksum_file_path"
   verify_sha256sum "$wrong_checksum_file_path" "$file_path"
   assert_equals "false" "$sha256sum_is_correct"
 }
 
+yb_test_expect_num_args() {
+  expect_num_args 0
+  expect_num_args 1 foo
+  expect_num_args 1-2 foo
+  expect_num_args 1-3 foo
+  expect_num_args 2 foo bar
+  expect_num_args 1-2 foo bar
+  expect_num_args 2-3 foo bar
+
+  assert_incorrect_num_args 0 foo bar
+  assert_incorrect_num_args 1
+  assert_incorrect_num_args 1 foo bar
+  assert_incorrect_num_args 2
+  assert_incorrect_num_args 2 foo
+  assert_incorrect_num_args 2 foo bar baz
+}
+
+# Arguments:
+#   - Python interpreter (e.g. python.7 or python3)
+#   - Regular expression that that the Python version should match
+#   - One or more modules to install in the virtualenv.
+check_virtualenv() {
+  local python_interpreter=$1
+  local python_version_regex=$2
+  shift 2
+  local venv_parent_dir=$TEST_TMPDIR/${python_interpreter}_venv_parent_dir
+  mkdir -p "$venv_parent_dir"
+  local requirement
+  for requirement in "$@"; do
+    echo "$requirement"
+  done >"$venv_parent_dir/requirements.txt"
+  local pip_list_output_path=$venv_parent_dir/pip_list_output.txt
+  local python_interpreter_path_file=$venv_parent_dir/python_interpreter_path.txt
+  (
+    yb_activate_virtualenv "$venv_parent_dir" "$python_interpreter"
+    pip list >"$pip_list_output_path"
+    command -v python >"$python_interpreter_path_file"
+  )
+  for requirement in "$@"; do
+    assert_egrep "^${requirement}[[:space:]]" "$pip_list_output_path"
+  done
+
+  local python_interpreter_path_in_venv
+  python_interpreter_path_in_venv=$(<"$python_interpreter_path_file")
+  local actual_python_version
+  actual_python_version=$( "$python_interpreter_path_in_venv" --version 2>&1 )
+  assert_matches_regex "Python $python_version_regex" "$actual_python_version"
+}
+
+yb_test_activate_virtualenv() {
+  check_virtualenv python2.7 "3([.]\d+)+" psutil
+  check_virtualenv python3 "3([.]\d+)+" requests
+}
+
+check_switching_virtualenv() {
+  local python_interpreter=$1
+  shift
+  local venv_parent_dir1=$TEST_TMPDIR/${python_interpreter}_venv_parent_dir1
+  mkdir -p "$venv_parent_dir1"
+  local venv_parent_dir2=$TEST_TMPDIR/${python_interpreter}_venv_parent_dir2
+  mkdir -p "$venv_parent_dir2"
+
+  # Only install requirements in the second virtualenv.
+  local requirement
+  for requirement in "$@"; do
+    echo "$requirement"
+  done >"$venv_parent_dir2/requirements.txt"
+
+  local pip_list_output_path1=$venv_parent_dir1/pip_list_output.txt
+  local pip_list_output_path2=$venv_parent_dir2/pip_list_output.txt
+  local pip_list_deactivated_output_path=$venv_parent_dir2/pip_list_deactivated.txt
+  local python_interpreter_path_file1=$venv_parent_dir1/python_interpreter_path.txt
+  local python_interpreter_path_file2=$venv_parent_dir2/python_interpreter_path.txt
+
+  (
+    yb_activate_virtualenv "$venv_parent_dir1" "$python_interpreter"
+    pip list >"$pip_list_output_path1"
+    command -v python >"$python_interpreter_path_file1"
+
+    yb_activate_virtualenv "$venv_parent_dir2" "$python_interpreter"
+    pip list >"$pip_list_output_path2"
+    command -v python >"$python_interpreter_path_file2"
+
+    yb_deactivate_virtualenv
+    pip list >"$pip_list_deactivated_output_path"
+  )
+
+  for requirement in "$@"; do
+    assert_egrep_no_results "^${requirement}[[:space:]]" "$pip_list_output_path1"
+    assert_egrep "^${requirement}[[:space:]]" "$pip_list_output_path2"
+    assert_egrep_no_results "^${requirement}[[:space:]]" "$pip_list_deactivated_output_path"
+  done
+}
+
+yb_test_switching_virtualenv() {
+  declare -a modules
+  modules=( requests yugabyte-pycommon )
+  check_switching_virtualenv python2.7 "${modules[@]}"
+  check_switching_virtualenv python3 "${modules[@]}"
+}
+
 # -------------------------------------------------------------------------------------------------
 # Main test runner code
+# -------------------------------------------------------------------------------------------------
 
 cd "$YB_BASH_COMMON_ROOT"
 
@@ -112,7 +270,7 @@ if command -v shellcheck >/dev/null; then
   )
 
   for shell_script in "${shell_scripts[@]}"; do
-    log "Checking script $shell_script"
+    log "Checking script $shell_script with shellcheck"
     shellcheck -x "$shell_script"
   done
 fi
@@ -124,10 +282,11 @@ trap cleanup EXIT
 
 global_exit_code=0
 test_fn_names=$(
-  declare -F | sed 's/^declare -f //g' | grep '^yb_test_'
+  declare -F | sed 's/^declare -f //' | grep '^yb_test_' | sort
 )
 
 for fn_name in $test_fn_names; do
+  heading "Running test case $fn_name"
   num_assertions_succeeded_in_current_test=0
   num_assertions_failed_in_current_test=0
   fn_status="[   OK   ]"
