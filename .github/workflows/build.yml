@@ -1,0 +1,47 @@
+name: CI
+
+# Controls when the action will run. Triggers the workflow on push or pull request 
+# events but only for the master branch
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - README.md
+
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+      - README.md
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    strategy:
+      matrix:
+        docker_image:
+          - yugabyteci/yb_build_infra_centos7:v2020-03-11T23_59_40
+          - yugabyteci/yb_build_infra_ubuntu1804:v2020-03-11T23_59_37
+
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event_name == 'push' &&
+      !contains(github.event.head_commit.message, 'skip ci') &&
+      !contains(github.event.head_commit.message, 'ci skip')
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Run tests
+        run: |
+          build_dir_in_container=/home/yugabyte/code/yugabyte-bash-common
+          docker run \
+            -i \
+            --mount type=bind,source="$PWD",target="$build_dir_in_container" \
+            "${{ matrix.docker_image }}" \
+            bash -c "
+              cd \"$build_dir_in_container\"
+              test/test.sh
+            "
