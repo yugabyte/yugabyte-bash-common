@@ -748,7 +748,7 @@ yb_activate_virtualenv() {
     python_interpreter=$2
   fi
 
-  local python_interpreter_basename=${yb_python_interpreter##*/}
+  local python_interpreter_basename=${python_interpreter##*/}
   declare -i python_major_version
   if [[ $python_interpreter_basename == python2.7 ]]; then
     python_major_version=2

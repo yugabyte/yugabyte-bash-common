@@ -11,7 +11,7 @@ on:
 
   pull_request:
     branches:
-      - "*"
+      - master
     paths-ignore:
       - README.md
 
@@ -22,15 +22,16 @@ jobs:
     strategy:
       matrix:
         docker_image:
-          - yugabyteci/yb_build_infra_centos7:v2020-03-11T23_59_40
-          - yugabyteci/yb_build_infra_ubuntu1804:v2020-03-11T23_59_37
+          - yugabyteci/yb_build_infra_centos7:v2020-03-22T23_59_32
+          - yugabyteci/yb_build_infra_ubuntu1804:v2020-03-22T23_59_33
 
     runs-on: ubuntu-latest
 
     if: >
-      github.event_name == 'push' &&
-      !contains(github.event.head_commit.message, 'skip ci') &&
-      !contains(github.event.head_commit.message, 'ci skip')
+      (github.event_name == 'push' &&
+       !contains(github.event.head_commit.message, 'skip ci') &&
+       !contains(github.event.head_commit.message, 'ci skip')) ||
+      github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v2
 
