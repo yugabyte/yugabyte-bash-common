@@ -250,7 +250,7 @@ check_switching_virtualenv() {
 
 yb_test_switching_virtualenv() {
   declare -a modules
-  modules=( requests yugabyte-pycommon )
+  modules=( requests numpy )
   check_switching_virtualenv python2.7 "${modules[@]}"
   check_switching_virtualenv python3 "${modules[@]}"
 }
