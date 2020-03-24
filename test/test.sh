@@ -204,8 +204,8 @@ check_virtualenv() {
 }
 
 yb_test_activate_virtualenv() {
-  check_virtualenv python2.7 "3([.]\d+)+" psutil
-  check_virtualenv python3 "3([.]\d+)+" requests
+  check_virtualenv python2.7 "2([.][0-9]+)+" psutil
+  check_virtualenv python3 "3([.][0-9]+)+" requests
 }
 
 check_switching_virtualenv() {
@@ -261,6 +261,9 @@ yb_test_switching_virtualenv() {
 
 cd "$YB_BASH_COMMON_ROOT"
 
+echo "Bash version: $BASH_VERSION"
+echo
+
 if command -v shellcheck >/dev/null; then
   # https://github.com/koalaman/shellcheck/wiki/SC2207
   # This has to work on Bash 3.x as well.
@@ -298,6 +301,9 @@ for fn_name in $test_fn_names; do
           "Assertions succeeded: $num_assertions_succeeded_in_current_test," \
           "failed: $num_assertions_failed_in_current_test"
 done
+
+# OK to duplicate the version information -- it is important.
+echo "Ran tests with Bash version: $BASH_VERSION"
 
 echo >&2 "Total assertions succeeded: $num_assertions_succeeded, failed: $num_assertions_failed"
 if [[ $global_exit_code -eq 0 ]]; then
