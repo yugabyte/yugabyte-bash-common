@@ -747,7 +747,7 @@ yb_activate_virtualenv() {
   if [[ ! -d $top_dir ]]; then
     fatal "Top-level directory to create a virtualenv subdirectory in does not exist: $top_dir"
   fi
-  local python_interpreter_basename=${yb_python_interpreter##*/}
+  local python_interpreter_basename=${python_interpreter##*/}
   declare -i python_major_version
   if [[ $python_interpreter_basename == python2.7 ]]; then
     python_major_version=2
