@@ -1,6 +1,6 @@
 # yugabyte-bash-common
 
-[![CI](https://github.com/yugabyte/yugabyte-bash-common/workflows/CI/badge.svg)](https://github.com/yugabyte/build-infra/actions?query=workflow%3ACI)
+[![CI](https://github.com/yugabyte/yugabyte-bash-common/workflows/CI/badge.svg)](https://github.com/yugabyte/yugabyte-bash-common/actions?query=workflow%3ACI)
 
 A common set of functionality in Bash to be used across YugaByte's repositories, e.g. as part of
 build scripts, etc. Could also be used in other projects.
