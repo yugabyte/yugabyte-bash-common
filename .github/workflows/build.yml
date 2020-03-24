@@ -11,7 +11,7 @@ on:
 
   pull_request:
     branches:
-      - "*"
+      - master
     paths-ignore:
       - README.md
 
@@ -28,9 +28,10 @@ jobs:
     runs-on: ubuntu-latest
 
     if: >
-      github.event_name == 'push' &&
-      !contains(github.event.head_commit.message, 'skip ci') &&
-      !contains(github.event.head_commit.message, 'ci skip')
+      (github.event_name == 'push' &&
+       !contains(github.event.head_commit.message, 'skip ci') &&
+       !contains(github.event.head_commit.message, 'ci skip')) ||
+      github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v2
 
