@@ -54,6 +54,8 @@ jobs:
                 cd \"$build_dir_in_container\"
                 test/test.sh
               "
-          else
+          elif [[ $OSTYPE == darwin* ]]; then
+            system_profiler SPSoftwareDataType
+            sw_vers
             test/test.sh
           fi
