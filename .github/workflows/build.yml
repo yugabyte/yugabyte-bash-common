@@ -29,16 +29,17 @@ jobs:
             docker_image: none
 
           - os: ubuntu-latest
-            docker_image: yugabyteci/yb_build_infra_centos7:v2020-03-11T23_43_12
+            docker_image: yugabyteci/yb_build_infra_centos7:v2020-03-24T08_20_00
 
           - os: ubuntu-latest
-            docker_image: yugabyteci/yb_build_infra_ubuntu1804:v2020-03-11T23_43_13
+            docker_image: yugabyteci/yb_build_infra_ubuntu1804:v2020-03-24T08_20_00
 
     if: >
       (github.event_name == 'push' &&
        !contains(github.event.head_commit.message, 'skip ci') &&
        !contains(github.event.head_commit.message, 'ci skip')) ||
       github.event_name == 'pull_request'
+
     steps:
       - uses: actions/checkout@v2
 
