@@ -51,7 +51,7 @@ jobs:
 
       - name: Run tests
         run: |
-          echo "OSTYPE: $OSTYPE"
+          echo "OSTYPE (outside Docker): $OSTYPE"
           echo "Build name: ${{ matrix.name }}"
           echo "Docker image: ${{ matrix.docker_image }}"
           if [[ $OSTYPE == linux* ]]; then
@@ -61,6 +61,7 @@ jobs:
               --mount type=bind,source="$PWD",target="$build_dir_in_container" \
               "${{ matrix.docker_image }}" \
               bash -c "
+                echo \"OSTYPE (inside Docker): \$OSTYPE\"
                 cd \"$build_dir_in_container\"
                 test/test.sh
               "
