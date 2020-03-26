@@ -28,13 +28,16 @@ jobs:
           - "CentOS 7"
           - "Ubuntu 18.04"
         include:
-          - os: macos-latest
+          - name: "macOS"
+            os: macos-latest
             docker_image: none
 
-          - os: ubuntu-latest
+          - name: "CentOS 7"
+            os: ubuntu-latest
             docker_image: yugabyteci/yb_build_infra_centos7:v2020-03-24T08_20_00
 
-          - os: ubuntu-latest
+          - name: "Ubuntu 18.04"
+            os: ubuntu-latest
             docker_image: yugabyteci/yb_build_infra_ubuntu1804:v2020-03-24T08_20_00
 
     if: >
@@ -48,6 +51,9 @@ jobs:
 
       - name: Run tests
         run: |
+          echo "OSTYPE: $OSTYPE"
+          echo "Build name: ${{ matrix.name }}"
+          echo "Docker image: ${{ matrix.docker_image }}"
           if [[ $OSTYPE == linux* ]]; then
             build_dir_in_container=/home/yugabyte/code/yugabyte-bash-common
             docker run \
