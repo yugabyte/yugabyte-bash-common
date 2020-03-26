@@ -544,7 +544,7 @@ read_file_and_trim() {
 # -------------------------------------------------------------------------------------------------
 
 run_sha256sum_on_mac() {
-  shasum --portable --algorithm 256 "$@"
+  shasum --binary --algorithm 256 "$@"
 }
 
 # Output variable: sha256sum_is_correct
