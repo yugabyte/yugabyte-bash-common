@@ -1,6 +1,6 @@
 name: CI
 
-# Controls when the action will run. Triggers the workflow on push or pull request 
+# Controls when the action will run. Triggers the workflow on push or pull request
 # events but only for the master branch
 on:
   push:
@@ -19,13 +19,20 @@ on:
 jobs:
   # This workflow contains a single job called "build"
   build:
+    runs-on: ${{ matrix.os }}
+
     strategy:
       matrix:
-        docker_image:
-          - yugabyteci/yb_build_infra_centos7:v2020-03-22T23_59_32
-          - yugabyteci/yb_build_infra_ubuntu1804:v2020-03-22T23_59_33
+        os: [macos-latest, ubuntu-latest, ubuntu-latest]
+        include:
+          - os: macos-latest
+            docker_image: none
 
-    runs-on: ubuntu-latest
+          - os: ubuntu-latest
+            docker_image: yugabyteci/yb_build_infra_centos7:v2020-03-11T23_43_12
+
+          - os: ubuntu-latest
+            docker_image: yugabyteci/yb_build_infra_ubuntu1804:v2020-03-11T23_43_13
 
     if: >
       (github.event_name == 'push' &&
@@ -37,12 +44,16 @@ jobs:
 
       - name: Run tests
         run: |
-          build_dir_in_container=/home/yugabyte/code/yugabyte-bash-common
-          docker run \
-            -i \
-            --mount type=bind,source="$PWD",target="$build_dir_in_container" \
-            "${{ matrix.docker_image }}" \
-            bash -c "
-              cd \"$build_dir_in_container\"
-              test/test.sh
-            "
+          if [[ $OSTYPE == linux* ]]; then
+            build_dir_in_container=/home/yugabyte/code/yugabyte-bash-common
+            docker run \
+              -i \
+              --mount type=bind,source="$PWD",target="$build_dir_in_container" \
+              "${{ matrix.docker_image }}" \
+              bash -c "
+                cd \"$build_dir_in_container\"
+                test/test.sh
+              "
+          else
+            test/test.sh
+          fi
