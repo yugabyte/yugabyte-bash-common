@@ -23,7 +23,10 @@ jobs:
 
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest, ubuntu-latest]
+        name:
+          - macOS
+          - "CentOS 7"
+          - "Ubuntu 18.04"
         include:
           - os: macos-latest
             docker_image: none
