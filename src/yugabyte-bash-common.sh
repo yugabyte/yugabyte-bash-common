@@ -425,15 +425,20 @@ expect_num_args() {
   fi
 }
 
-# Make a regular expression from a list of possible values. This function takes any non-zero number
-# of arguments, but each argument is further broken down into components separated by whitespace,
-# and those components are treated as separate possible values. Empty values are ignored.
+# Make a regular expression from a list of values.
+# Arguments:
+#   - list_var_name: the prefix for output variable names.
+#     ${list_var_name}_RE becomes the anchored regex with parentheses, e.g.: ^(foo|bar)$
+#     ${list_var_name}_RAW_RE becomes the unanchored regex with no parentheses, e.g.: foo|bar
+#   - The list of possible values to include in the regex.
 make_regex_from_list() {
-  expect_num_args 1 "$@"
+  if [[ $# -lt 2 ]]; then
+    fatal "make_regex_from_list expects at least two arguments"
+  fi
   local list_var_name=$1
+  shift
   local regex=""
-  local list_var_name_full="${list_var_name[*]}"
-  for item in "${!list_var_name_full}"; do
+  for item in "$@"; do
     if [[ -z $item ]]; then
       continue
     fi
@@ -444,13 +449,6 @@ make_regex_from_list() {
   done
   eval "${list_var_name}_RE=\"^($regex)$\""
   eval "${list_var_name}_RAW_RE=\"$regex\""
-}
-
-make_regexes_from_lists() {
-  local list_var_name
-  for list_var_name in "$@"; do
-    make_regex_from_list "$list_var_name"
-  done
 }
 
 # -------------------------------------------------------------------------------------------------

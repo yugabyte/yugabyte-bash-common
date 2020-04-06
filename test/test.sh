@@ -255,6 +255,57 @@ yb_test_switching_virtualenv() {
   check_switching_virtualenv python3 "${modules[@]}"
 }
 
+yb_test_make_regex_from_list() {
+  make_regex_from_list MY_TEST_LIST foo bar baz
+  assert_equals "^(foo|bar|baz)$" "$MY_TEST_LIST_RE"
+}
+
+yb_test_make_regex_from_lists() {
+  local MY_TEST_LIST_RE
+  local MY_TEST_LIST_RAW_RE
+  make_regex_from_list MY_TEST_LIST foo bar baz
+  assert_equals "^(foo|bar|baz)$" "$MY_TEST_LIST_RE"
+  assert_equals "foo|bar|baz" "$MY_TEST_LIST_RAW_RE"
+}
+
+# -------------------------------------------------------------------------------------------------
+# Command line argument parsing
+# -------------------------------------------------------------------------------------------------
+
+print_usage() {
+  cat <<-EOT
+Usage: ${0##*/} [<options>]
+Options:
+  -h, --help
+    Show usage
+  -t, --test-filter-regex [<test_re>]
+    Only run tests whose names match the given regular expression (anchored). The yb_test_ prefix
+    of the test function name is not included when matching. E.g. specify "logging" to only run the
+    yb_test_logging test function, and specify .*virtualenv.* to run all test functions containing
+    the word virtualenv.
+EOT
+}
+
+parse_args() {
+  yb_test_case_filter_regex=""
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -h|--help)
+        print_usage
+        exit
+      ;;
+      -t|--test-filter-regex)
+        yb_test_case_filter_regex=$2
+        shift
+      ;;
+      *)
+        echo >&2 "Invalid argument: $1"
+        exit 1
+    esac
+    shift
+  done
+}
+
 # -------------------------------------------------------------------------------------------------
 # Main test runner code
 # -------------------------------------------------------------------------------------------------
@@ -263,6 +314,8 @@ cd "$YB_BASH_COMMON_ROOT"
 
 echo "Bash version: $BASH_VERSION"
 echo
+
+parse_args "$@"
 
 if command -v shellcheck >/dev/null; then
   # https://github.com/koalaman/shellcheck/wiki/SC2207
@@ -288,7 +341,14 @@ test_fn_names=$(
   declare -F | sed 's/^declare -f //' | grep '^yb_test_' | sort
 )
 
+num_test_functions_skipped=0
 for fn_name in $test_fn_names; do
+  if [[ -n $yb_test_case_filter_regex &&
+        ! ${fn_name#yb_test_} =~ $yb_test_case_filter_regex ]]; then
+    (( num_test_functions_skipped++ ))
+    continue
+  fi
+
   heading "Running test case $fn_name"
   num_assertions_succeeded_in_current_test=0
   num_assertions_failed_in_current_test=0
@@ -310,5 +370,9 @@ if [[ $global_exit_code -eq 0 ]]; then
   echo "Tests SUCCEEDED"
 else
   echo "Tests FAILED"
+fi
+
+if [[ $num_test_functions_skipped -gt 0 ]]; then
+  echo >&2 "Test functions skipped: $num_test_functions_skipped"
 fi
 exit "$global_exit_code"
