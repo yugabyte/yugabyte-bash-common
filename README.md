@@ -2,8 +2,9 @@
 
 [![CI](https://github.com/yugabyte/yugabyte-bash-common/workflows/CI/badge.svg)](https://github.com/yugabyte/yugabyte-bash-common/actions?query=workflow%3ACI)
 
-A common set of functionality in Bash to be used across YugaByte's repositories, e.g. as part of
-build scripts, etc. Could also be used in other projects.
+A common set of functionality in Bash to be used across Yugabyte's repositories, e.g. as part of
+build scripts, etc. Could also be used in other projects. As a rule, new scripts of any significant
+complexity should be written in Python, not in Bash.
 
 ## Using this library in your project
 
