@@ -256,13 +256,7 @@ yb_test_switching_virtualenv() {
 }
 
 yb_test_make_regex_from_list() {
-  # shellcheck disable=SC2034
-  MY_TEST_LIST=(
-    foo
-    bar
-    baz
-  )
-  make_regex_from_list MY_TEST_LIST
+  make_regex_from_list MY_TEST_LIST foo bar baz
   assert_equals "^(foo|bar|baz)$" "$MY_TEST_LIST_RE"
 }
 
