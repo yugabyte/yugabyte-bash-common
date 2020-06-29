@@ -345,7 +345,7 @@ num_test_functions_skipped=0
 for fn_name in $test_fn_names; do
   if [[ -n $yb_test_case_filter_regex &&
         ! ${fn_name#yb_test_} =~ $yb_test_case_filter_regex ]]; then
-    (( num_test_functions_skipped++ ))
+    (( num_test_functions_skipped+=1 ))
     continue
   fi
 
