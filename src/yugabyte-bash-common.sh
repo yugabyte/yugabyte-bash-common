@@ -42,7 +42,7 @@ readonly NO_COLOR="\033[0m"
 readonly HORIZONTAL_LINE=$( printf '=%.0s' {1..80} )
 
 # This could be switched to e.g. python3 or a Python interpreter in a specific location.
-yb_python_interpreter=python2.7
+yb_python_interpreter=python3
 yb_os_detected=false
 
 # This is the name of virtual environment directories that will be created automatically inside
