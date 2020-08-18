@@ -71,7 +71,7 @@ if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
       fi
     fi
     homebrew_bash_version=$(
-      "$homebrew_bash_path" --version | egrep -o 'GNU bash, version [0-9]+' | awk '{print $NF}'
+      "$homebrew_bash_path" --version | grep -Eo 'GNU bash, version [0-9]+' | awk '{print $NF}'
     )
     if [[ ! $homebrew_bash_version =~ ^[0-9]+$ ]]; then
       fatal "Could not determine Bash version for $homebrew_bash_version"
