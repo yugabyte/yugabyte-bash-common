@@ -22,6 +22,10 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   exit 1
 fi
 
+# Allow the user of the library to decide if warnings should be fatal
+# We default to false meaning we don't fail on a warning.
+FAIL_ON_WARNING=${FAIL_ON_WARNING:-false}
+
 # shellcheck disable=SC2034
 readonly YB_BASH_COMMON_ROOT=$( cd "${BASH_SOURCE/*}" && cd .. && pwd )
 
@@ -328,8 +332,10 @@ warn() {
 
   # shellcheck disable=SC2048,SC2086
   echo -e "[$( get_timestamp )" \
-       "${BASH_SOURCE[$stack_idx1]##*/}:${BASH_LINENO[$stack_idx0]}" \
-       "${FUNCNAME[$stack_idx1]}]" ${RED_COLOR} $* ${NO_COLOR} >&2
+    "${BASH_SOURCE[$stack_idx1]##*/}:${BASH_LINENO[$stack_idx0]}" \
+    "${FUNCNAME[$stack_idx1]}]" $* >&2
+
+  ${FAIL_ON_WARNING} && exit 1
 }
 
 log_file_existence() {
