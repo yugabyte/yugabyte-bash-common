@@ -66,6 +66,8 @@ jobs:
                 test/test.sh
               "
           elif [[ $OSTYPE == darwin* ]]; then
+            brew bundle # This should pull in the correct bash version
+            export PATH="/usr/local/bin:${PATH}"
             system_profiler SPSoftwareDataType
             sw_vers
             test/test.sh
