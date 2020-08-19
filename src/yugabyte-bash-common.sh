@@ -22,6 +22,10 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   exit 1
 fi
 
+# Allow the user of the library to decide if warnings should be fatal
+# We default to false meaning we don't fail on a warning.
+FAIL_ON_WARNING=${FAIL_ON_WARNING:-false}
+
 # shellcheck disable=SC2034
 readonly YB_BASH_COMMON_ROOT=$( cd "${BASH_SOURCE/*}" && cd .. && pwd )
 
@@ -49,6 +53,39 @@ yb_os_detected=false
 # directories that contain a requirements.txt file by the yb_activate_virtualenv function.
 yb_virtualenv_basename=venv
 
+
+# TODO: Remove this method from setup_workstation.sh
+# -------------------------------------------------------------------------------------------------
+# Bash version validation
+# -------------------------------------------------------------------------------------------------
+
+if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
+  if "$is_mac"; then
+    log "Bash 3 detected, using Homebrew to install Bash 4 or later if not already installed"
+    homebrew_bash_path=/usr/local/bin/bash
+    if [[ ! -f $homebrew_bash_path ]]; then
+      # We can't use "set -x" in a subshell in Bash 3, because the error code is not propagated.
+      ( set -x; brew install bash )
+      if [[ ! -f $homebrew_bash_path ]]; then
+        fatal "File $homebrew_bash_path missing even after 'brew install bash'"
+      fi
+    fi
+    homebrew_bash_version=$(
+      "$homebrew_bash_path" --version | grep -Eo 'GNU bash, version [0-9]+' | awk '{print $NF}'
+    )
+    if [[ ! $homebrew_bash_version =~ ^[0-9]+$ ]]; then
+      fatal "Could not determine Bash version for $homebrew_bash_version"
+    fi
+    if [[ $homebrew_bash_version -lt 4 ]]; then
+      fatal "$homebrew_bash_version looks like Bash 3 or older"
+    fi
+    "$homebrew_bash_path" "$0" "$@"
+    exit
+  fi
+  echo "Bash 3 is not supported, and can't install Bash 4 on this platform" >&2
+  exit 1
+fi
+
 # -------------------------------------------------------------------------------------------------
 # Git related
 # -------------------------------------------------------------------------------------------------
@@ -68,7 +105,7 @@ get_current_git_sha1() {
 detect_num_cpus() {
   if [[ ! ${YB_NUM_CPUS:-} =~ ^[0-9]+$ ]]; then
     if is_linux; then
-      YB_NUM_CPUS=$(grep -c processor /proc/cpuinfo)
+      YB_NUM_CPUS=$(nproc)
     elif is_mac; then
       YB_NUM_CPUS=$(sysctl -n hw.ncpu)
     else
@@ -109,20 +146,22 @@ detect_os() {
 
   if "$is_linux"; then
     # Detect Linux flavor
-    if [[ -f /etc/redhat-release ]] && grep CentOS /etc/redhat-release > /dev/null; then
-      is_centos=true
-      short_os_name="centos"
-    elif [[ -f /etc/issue ]]; then
-      if grep -q Ubuntu /etc/issue; then
-        is_debian=true
-        is_ubuntu=true
-        short_os_name="ubuntu"
-      elif grep -q Debian /etc/issue; then
-        # shellcheck disable=SC2034
-        is_debian=true
-        # shellcheck disable=SC2034
-        short_os_name="debian"
-      fi
+    if [[ -f /etc/os-release ]]; then
+      short_os_name=$(grep '^ID=' /etc/os-release | cut -d= -f2 | sed -e 's/^"//' -e 's/"$//')
+      case "${short_os_name}" in
+        'ubuntu')
+          is_ubuntu=true
+          ;& # This falls though to the next statement
+        'ubuntu'|'debian')
+          is_debian=true
+          ;;
+        'centos')
+          is_centos=true
+          ;;
+        *)
+          warn "${short_os_name} is not a supported Linux distribution"
+          ;;
+      esac
     fi
   fi
 
@@ -318,6 +357,18 @@ log_with_color() {
   local log_color=$1
   shift
   log "$log_color$*$NO_COLOR"
+}
+
+warn() {
+  local stack_idx0=${yb_log_skip_top_frames:-0}
+  local stack_idx1=$(( stack_idx0 + 1 ))
+
+  # shellcheck disable=SC2048,SC2086
+  echo -e "[$( get_timestamp )" \
+    "${BASH_SOURCE[$stack_idx1]##*/}:${BASH_LINENO[$stack_idx0]}" \
+    "${FUNCNAME[$stack_idx1]}]" $* >&2
+
+  ${FAIL_ON_WARNING} && exit 1
 }
 
 log_file_existence() {
