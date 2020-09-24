@@ -59,18 +59,19 @@ yb_virtualenv_basename=venv
 # Bash version validation
 # -------------------------------------------------------------------------------------------------
 
-if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
-  if "$is_mac"; then
-    log "Bash 3 detected, using Homebrew to install Bash 4 or later if not already installed"
-    homebrew_bash_path=/usr/local/bin/bash
-    if [[ ! -f $homebrew_bash_path ]]; then
-      # We can't use "set -x" in a subshell in Bash 3, because the error code is not propagated.
-      ( set -x; brew install bash )
+check_mac_bash_version() {
+  if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
+    if "$is_mac"; then
+      log "Bash 3 detected, using Homebrew to install Bash 4 or later if not already installed"
+      homebrew_bash_path=/usr/local/bin/bash
       if [[ ! -f $homebrew_bash_path ]]; then
-        fatal "File $homebrew_bash_path missing even after 'brew install bash'"
+        # We can't use "set -x" in a subshell in Bash 3, because the error code is not propagated.
+        ( set -x; brew install bash )
+        if [[ ! -f $homebrew_bash_path ]]; then
+          fatal "File $homebrew_bash_path missing even after 'brew install bash'"
+        fi
       fi
-    fi
-    homebrew_bash_version=$(
+      homebrew_bash_version=$(
       "$homebrew_bash_path" --version | grep -Eo 'GNU bash, version [0-9]+' | awk '{print $NF}'
     )
     if [[ ! $homebrew_bash_version =~ ^[0-9]+$ ]]; then
@@ -81,10 +82,11 @@ if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
     fi
     "$homebrew_bash_path" "$0" "$@"
     exit
+    fi
+    echo "Bash 3 is not supported, and can't install Bash 4 on this platform" >&2
+    exit 1
   fi
-  echo "Bash 3 is not supported, and can't install Bash 4 on this platform" >&2
-  exit 1
-fi
+}
 
 # -------------------------------------------------------------------------------------------------
 # Git related
@@ -847,3 +849,4 @@ yb_activate_virtualenv() {
 # -------------------------------------------------------------------------------------------------
 
 detect_os
+check_mac_bash_version
