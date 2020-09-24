@@ -28,7 +28,8 @@ fi
 # Bash version validation
 # -------------------------------------------------------------------------------------------------
 if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
-  echo "Bash 3 is not supported, and can't install Bash 4 on this platform"
+  echo "Bash 3 ($BASH_VERSION) is not supported!"
+  echo "Please install bash version 4 or newer and ensure it is at the start of your PATH."
   exit 1
 fi
 
