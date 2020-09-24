@@ -73,18 +73,16 @@ check_mac_bash_version() {
       fi
       homebrew_bash_version=$(
       "$homebrew_bash_path" --version | grep -Eo 'GNU bash, version [0-9]+' | awk '{print $NF}'
-    )
-    if [[ ! $homebrew_bash_version =~ ^[0-9]+$ ]]; then
-      fatal "Could not determine Bash version for $homebrew_bash_version"
+      )
+      if [[ ! $homebrew_bash_version =~ ^[0-9]+$ ]]; then
+        fatal "Could not determine Bash version for $homebrew_bash_version"
+      fi
+      if [[ $homebrew_bash_version -lt 4 ]]; then
+        fatal "$homebrew_bash_version looks like Bash 3 or older"
+      fi
+      fatal "Bash 4 is installed at ${homebrew_bash_path}. Please add that to the front of you PATH"
     fi
-    if [[ $homebrew_bash_version -lt 4 ]]; then
-      fatal "$homebrew_bash_version looks like Bash 3 or older"
-    fi
-    "$homebrew_bash_path" "$0" "$@"
-    exit
-    fi
-    echo "Bash 3 is not supported, and can't install Bash 4 on this platform" >&2
-    exit 1
+    fatal "Bash 3 is not supported, and can't install Bash 4 on this platform"
   fi
 }
 
