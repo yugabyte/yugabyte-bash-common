@@ -22,6 +22,17 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   exit 1
 fi
 
+
+# TODO: Remove this check from setup_workstation.sh
+# -------------------------------------------------------------------------------------------------
+# Bash version validation
+# -------------------------------------------------------------------------------------------------
+if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
+  echo "Bash 3 is not supported, and can't install Bash 4 on this platform"
+  exit 1
+fi
+
+
 # Allow the user of the library to decide if warnings should be fatal
 # We default to false meaning we don't fail on a warning.
 FAIL_ON_WARNING=${FAIL_ON_WARNING:-false}
@@ -52,39 +63,6 @@ yb_os_detected=false
 # This is the name of virtual environment directories that will be created automatically inside
 # directories that contain a requirements.txt file by the yb_activate_virtualenv function.
 yb_virtualenv_basename=venv
-
-
-# TODO: Remove this method from setup_workstation.sh
-# -------------------------------------------------------------------------------------------------
-# Bash version validation
-# -------------------------------------------------------------------------------------------------
-
-check_mac_bash_version() {
-  if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
-    if "$is_mac"; then
-      log "Bash 3 detected, using Homebrew to install Bash 4 or later if not already installed"
-      homebrew_bash_path=/usr/local/bin/bash
-      if [[ ! -f $homebrew_bash_path ]]; then
-        # We can't use "set -x" in a subshell in Bash 3, because the error code is not propagated.
-        ( set -x; brew install bash )
-        if [[ ! -f $homebrew_bash_path ]]; then
-          fatal "File $homebrew_bash_path missing even after 'brew install bash'"
-        fi
-      fi
-      homebrew_bash_version=$(
-      "$homebrew_bash_path" --version | grep -Eo 'GNU bash, version [0-9]+' | awk '{print $NF}'
-      )
-      if [[ ! $homebrew_bash_version =~ ^[0-9]+$ ]]; then
-        fatal "Could not determine Bash version for $homebrew_bash_version"
-      fi
-      if [[ $homebrew_bash_version -lt 4 ]]; then
-        fatal "$homebrew_bash_version looks like Bash 3 or older"
-      fi
-      fatal "Bash 4 is installed at ${homebrew_bash_path}. Please add that to the front of you PATH"
-    fi
-    fatal "Bash 3 is not supported, and can't install Bash 4 on this platform"
-  fi
-}
 
 # -------------------------------------------------------------------------------------------------
 # Git related
@@ -368,7 +346,9 @@ warn() {
     "${BASH_SOURCE[$stack_idx1]##*/}:${BASH_LINENO[$stack_idx0]}" \
     "${FUNCNAME[$stack_idx1]}]" $* >&2
 
-  ${FAIL_ON_WARNING} && exit 1
+  if ${FAIL_ON_WARNING}; then
+    exit 1
+  fi
 }
 
 log_file_existence() {
