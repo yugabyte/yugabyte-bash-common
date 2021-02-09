@@ -17,7 +17,9 @@ YB_PYTHON_VERSION=${YB_PYTHON_VERSION:-3.7}
 py_major_version=$(cut -f1 -d. <<<"${YB_PYTHON_VERSION}")
 
 YB_VENV_BASE_DIR=${YB_VENV_BASE_DIR:-~/.venv/yb}
-YB_REFRESH_VENV=${YB_REFRESH_VENV:-false}
+YB_RECREATE_VIRTUALENV=${YB_RECREATE_VIRTUALENV:-false}
+
+VERBOSE=${VERBOSE:-false}
 
 echo "Using YB_PYTHON_VERSION=${YB_PYTHON_VERSION}"
 
@@ -78,7 +80,8 @@ else
   refreeze=true
 fi
 
-venv_dir="${YB_VENV_BASE_DIR}/$(sha256sum - <<<"${unique_input}"| awk '{print $1}')/YB_VENV"
+unique_sha=$(sha256sum - <<<"${unique_input}"| awk '{print $1}')
+venv_dir="${YB_VENV_BASE_DIR}/${unique_sha}/$(basename ${root_dir})-venv"
 
 echo "Using venv_dir=${venv_dir}"
 
@@ -88,7 +91,7 @@ if ! mkdir -p "${YB_VENV_BASE_DIR}"; then
 fi
 
 # Remove the venv, we want to ensure it is fresh
-if [[ "${YB_REFRESH_VENV}" == 'true' ]]; then
+if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]]; then
   rm -rf "${venv_dir}"
 fi
 
