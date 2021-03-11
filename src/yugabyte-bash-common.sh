@@ -59,6 +59,10 @@ readonly HORIZONTAL_LINE=$( printf '=%.0s' {1..80} )
 
 # This could be switched to e.g. python3 or a Python interpreter in a specific location.
 yb_python_interpreter=python3
+
+# If this is set, pip in the virtualenv will be upgraded (but at most once).
+yb_virtualenv_upgrade_pip=false
+
 yb_os_detected=false
 
 # This is the name of virtual environment directories that will be created automatically inside
@@ -794,6 +798,12 @@ yb_activate_virtualenv() {
   fi
   local venv_dir=$top_dir/$yb_virtualenv_basename
   yb_deactivate_virtualenv
+
+  local pip_path="$venv_dir/bin/pip"
+  if [[ $python_major_version -eq 3 ]]; then
+    pip_path+="3"
+  fi
+
   if [[ ! -d $venv_dir ]]; then
     if [[ $python_major_version -eq 3 ]]; then
       "$python_interpreter" -m venv "$venv_dir"
@@ -801,6 +811,10 @@ yb_activate_virtualenv() {
       log "Automatically installing the virtualenv module"
       "$python_interpreter" -m pip install virtualenv --user
       "$python_interpreter" -m virtualenv "$venv_dir"
+    fi
+
+    if [[ $yb_virtualenv_upgrade_pip == "true" ]]; then
+      "$pip_path" install --upgrade pip
     fi
   fi
 
@@ -816,8 +830,8 @@ yb_activate_virtualenv() {
   fi
   if [[ -f $requirements_path ]]; then
     # Don't fail if every output line from pip is of the "Requirements already satisfied" form.
-    "$venv_dir"/bin/pip install -r "$requirements_path" | \
-        grep -Ev '^Requirement already satisfied: ' || true
+    "$pip_path" install -r "$requirements_path" | \
+        ( grep -Ev '^Requirement already satisfied: ' || true )
   else
     log "Warning: no requirements.txt or requirements_frozen.txt found at $top_dir"
   fi
