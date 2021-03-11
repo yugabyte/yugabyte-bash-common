@@ -42,11 +42,22 @@ assert_equals() {
   fi
   local expected=$1
   local actual=$2
-  if [[ $expected == "$actual" ]]; then
+  if [[ $actual == "$expected" ]]; then
     increment_successful_assertions
   else
     echo "Assertion failed: expected '$expected', got '$actual'" >&2
     increment_failed_assertions
+  fi
+}
+
+assert_not_equals() {
+  local unexpected=$1
+  local actual=$2
+  if [[ $actual == "$unexpected" ]]; then
+    echo "Assertion failed: did not expect '$unexpected'" >&2
+    increment_failed_assertions
+  else
+    increment_successful_assertions
   fi
 }
 
@@ -178,34 +189,80 @@ yb_test_expect_num_args() {
 check_virtualenv() {
   local python_interpreter=$1
   local python_version_regex=$2
-  shift 2
+
+  local should_upgrade_pip_str=$3
+  if [[ $should_upgrade_pip_str == "no_pip_upgrade" ]]; then
+    yb_virtualenv_upgrade_pip=false
+  elif [[ $should_upgrade_pip_str == "upgrade_pip" ]]; then
+    yb_virtualenv_upgrade_pip=true
+  else
+    fatal "Invalid value of 3rd parameter: $should_upgrade_pip_str (must be 'no_pip_upgrade' or" \
+          "'upgrade_pip')."
+  fi
+
+  local should_expect_success_str=$4
+  if [[ $should_expect_success_str == "expect_success" ]]; then
+    expect_success=true
+  elif [[ $should_expect_success_str == "expect_failure" ]]; then
+    expect_success=false
+  else
+    fatal "Invalid value of 4th parameter: $should_expect_success_str" \
+          "(must be 'expect_success' or 'expect_failure')."
+  fi
+
+  log "-------------------------------------------------------------------------------------------"
+  log "python_interpreter=$python_interpreter"
+  log "python_version_regex=$python_version_regex"
+  log "yb_virtualenv_upgrade_pip=$yb_virtualenv_upgrade_pip"
+  log "expect_success=$expect_success"
+  log "-------------------------------------------------------------------------------------------"
+
+  shift 4
+  local python_modules_to_install=( "$@" )
+
   local venv_parent_dir=$TEST_TMPDIR/${python_interpreter}_venv_parent_dir
   mkdir -p "$venv_parent_dir"
   local requirement
-  for requirement in "$@"; do
+  for requirement in "${python_modules_to_install[@]}"; do
     echo "$requirement"
   done >"$venv_parent_dir/requirements.txt"
   local pip_list_output_path=$venv_parent_dir/pip_list_output.txt
+  local exit_code_output_path=$venv_parent_dir/yb_activate_virtualenv_exit_code.txt
   local python_interpreter_path_file=$venv_parent_dir/python_interpreter_path.txt
   (
+    set +e
     yb_activate_virtualenv "$venv_parent_dir" "$python_interpreter"
+    echo "$?" >"$exit_code_output_path"
+    set -e
     pip list >"$pip_list_output_path"
     command -v python >"$python_interpreter_path_file"
   )
-  for requirement in "$@"; do
-    assert_egrep "^${requirement}[[:space:]]" "$pip_list_output_path"
-  done
+  local yb_activate_virtualenv_exit_code
+  yb_activate_virtualenv_exit_code=$(<"$exit_code_output_path")
 
+  # We still expect the virtualenv to be created in all of our expected-failure use cases.
+  # It is the module installation that may fail.
   local python_interpreter_path_in_venv
   python_interpreter_path_in_venv=$(<"$python_interpreter_path_file")
   local actual_python_version
   actual_python_version=$( "$python_interpreter_path_in_venv" --version 2>&1 )
   assert_matches_regex "Python $python_version_regex" "$actual_python_version"
+
+  if [[ "$expect_success" == "true" ]]; then
+    assert_equals 0 "$yb_activate_virtualenv_exit_code"
+    for requirement in "${python_modules_to_install[@]}"; do
+      assert_egrep "^${requirement}[[:space:]]" "$pip_list_output_path"
+    done
+  else
+    assert_not_equals 0 "$yb_activate_virtualenv_exit_code"
+  fi
 }
 
 yb_test_activate_virtualenv() {
-  check_virtualenv python2.7 "2([.][0-9]+)+" psutil
-  check_virtualenv python3 "3([.][0-9]+)+" requests
+  check_virtualenv python2.7 "2([.][0-9]+)+" no_pip_upgrade expect_success psutil
+  check_virtualenv python3 "3([.][0-9]+)+"   no_pip_upgrade expect_success requests
+  check_virtualenv python3 "3([.][0-9]+)+"   upgrade_pip    expect_success codecheck
+  check_virtualenv python3 "3([.][0-9]+)+"   upgrade_pip    expect_failure nosuchmodule
 }
 
 check_switching_virtualenv() {
