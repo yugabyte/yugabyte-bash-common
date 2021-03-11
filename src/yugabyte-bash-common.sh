@@ -798,6 +798,12 @@ yb_activate_virtualenv() {
   fi
   local venv_dir=$top_dir/$yb_virtualenv_basename
   yb_deactivate_virtualenv
+
+  local pip_path="$venv_dir/bin/pip"
+  if [[ $python_major_version -eq 3 ]]; then
+    pip_path+="3"
+  fi
+
   if [[ ! -d $venv_dir ]]; then
     if [[ $python_major_version -eq 3 ]]; then
       "$python_interpreter" -m venv "$venv_dir"
@@ -806,23 +812,16 @@ yb_activate_virtualenv() {
       "$python_interpreter" -m pip install virtualenv --user
       "$python_interpreter" -m virtualenv "$venv_dir"
     fi
+
+    if [[ $yb_virtualenv_upgrade_pip == "true" ]]; then
+      "$pip_path" install --upgrade pip
+    fi
   fi
 
   set +u
   # shellcheck disable=SC1090
   . "$venv_dir"/bin/activate
   set -u
-
-  local pip_path="$venv_dir/bin/pip"
-  if [[ $python_major_version -eq 3 ]]; then
-    pip_path+="3"
-  fi
-
-  local pip_upgrade_flag_file_path="$venv_dir/yb_pip_upgraded"
-  if [[ $yb_virtualenv_upgrade_pip == "true" && ! -f "$pip_upgrade_flag_file_path" ]]; then
-    "$pip_path" install --upgrade pip
-    touch "$pip_upgrade_flag_file_path"
-  fi
 
   local requirements_path=$top_dir/requirements.txt
   local frozen_requirements_path=$top_dir/requirements_frozen.txt
