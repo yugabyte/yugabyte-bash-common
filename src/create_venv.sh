@@ -1,8 +1,26 @@
 #!/usr/bin/env bash
 
+# Copyright (c) YugaByte, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.  You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software distributed under the License
+# is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+# or implied.  See the License for the specific language governing permissions and limitations
+# under the License.
+#
 
-# Use SHA of requirements.txt as a comment in requirements_frozen.txt
-# 
+[[ "${_YB_CREATE_VENV_SHLIB:=""}" == "yes" ]] && return 0
+_YB_CREATE_VENV_SHLIB=yes
+
+set -e -u -o pipefail
+
+DIR="${BASH_SOURCE%/*}"
+if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+. "${DIR}"/detect_python.sh
 
 function text_file_sha() {
   local file="${1}"
@@ -11,55 +29,50 @@ function text_file_sha() {
   awk '{print $1}'<<<"$(sha256sum <<<"${tmp}")"
 }
 
-set -e -u -o pipefail
+function verbose() {
+  # Print our info messages to stderr and only when asked (VERBOSE=true).
+  local msg="$@"
+  if [[ ${VERBOSE} == "true" ]]; then
+    echo -e "${msg}" >&2
+  fi
+}
 
-YB_PYTHON_VERSION=${YB_PYTHON_VERSION:-3.7}
-py_major_version=$(cut -f1 -d. <<<"${YB_PYTHON_VERSION}")
+function needs_refreeze() {
+  local reqs_sha="${1}"
+  local frzn_file="${2}"
+  local refreeze=false
+  if [[ -f "${frzn_file}" ]]; then
+    if ! grep "# YB_SHA: ${reqs_sha}" "${frzn_file}" >/dev/null 2>&1; then
+      refreeze=true
+    fi
+  else
+    refreeze=true
+  fi
+  return ${refreeze}
+}
 
-YB_VENV_BASE_DIR=${YB_VENV_BASE_DIR:-~/.venv/yb}
+YB_BUILD_STRICT=${YB_BUILD_STRICT:-false}
 YB_RECREATE_VIRTUALENV=${YB_RECREATE_VIRTUALENV:-false}
+YB_VENV_BASE_DIR=${YB_VENV_BASE_DIR:-~/.venv/yb}
 
 VERBOSE=${VERBOSE:-false}
 
-echo "Using YB_PYTHON_VERSION=${YB_PYTHON_VERSION}"
+verbose "Using YB_PYTHON_VERSION=${YB_PYTHON_VERSION}"
 
-set +u
-if [[ -n "${VIRTUAL_ENV}" ]] && [[ -d "${VIRTUAL_ENV}" ]]; then
-  echo "Please exit your current venv first."
-  echo "type 'deactivate' in your shell"
-  exit 1
-fi
-set -u
+py_version=$(${yb_python_interpreter} --version 2>&1 | awk '{print $2}')
 
-py_cmd=''
-for cmd in "python${YB_PYTHON_VERSION}" "python${py_major_version}" "python"; do
-  if cmd="$(command -v "${cmd}")"; then
-    if "${cmd}" --version 2>&1 | grep "${YB_PYTHON_VERSION}"; then
-      py_cmd="${cmd}"
-      break
-    fi
-  fi
-done
-
-if [[ -z "${py_cmd}" ]]; then
-  echo "No python executable found matching ${YB_PYTHON_VERSION}"
-  exit 1
-fi
-
-py_version=$(${py_cmd} --version 2>&1 | awk '{print $2}')
-
-echo "Using ${py_cmd} (${py_version})"
+verbose "Using ${yb_python_interpreter} (${py_version})"
 
 root_dir=${1:-$(pwd)}
 reqs_file="${root_dir}/requirements.txt"
 frzn_file="${root_dir}/requirements_frozen.txt"
 
-echo "Using root_dir=${root_dir}"
-echo "Using reqs_file=${reqs_file}"
+verbose "Using root_dir=${root_dir}"
+verbose "Using reqs_file=${reqs_file}"
 
 # Include the OS and h/w arch.  This allows to use a VM or container with a shared persistent
 # externally mounted YB_VENV_BASE_DIR
-unique_input="$(uname -s)$(uname -m)${py_cmd}"
+unique_input="$(uname -s)$(uname -m)${py_version}"
 if [[ ! -f "${reqs_file}" ]]; then
   echo "WARNING: No requirements.txt file found!"
   exit 1
@@ -68,22 +81,25 @@ reqs_sha="$(text_file_sha "${reqs_file}")"
 
 unique_input="${unique_input}$(sort -u "${reqs_file}")"
 
-refreeze=false
-if [[ -f "${frzn_file}" ]]; then
-  unique_input="${unique_input}$(sort -u "${frzn_file}")"
-  if ! grep "# YB_SHA: ${reqs_sha}" "${frzn_file}" >/dev/null 2>&1; then
-    refreeze=true
-  else
-    reqs_file="${frzn_file}"
+if needs_refreeze "${reqs_sha}" "${frzn_file}"; then
+  if ${YB_BUILD_STRICT}; then
+    echo "YB_BUILD_STRICT: ${frzn_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
+    exit 1
   fi
 else
-  refreeze=true
+  reqs_file="${frzn_file}"
+  unique_input="${unique_input}$(sort -u "${frzn_file}")"
+fi
+unique_input="${unique_input}$(sort -u "${frzn_file}")"
+if ${refreeze} && ${YB_BUILD_STRICT}; then
+  echo "YB_BUILD_STRICT: ${frzn_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
+  exit 1
 fi
 
 unique_sha=$(sha256sum - <<<"${unique_input}"| awk '{print $1}')
 venv_dir="${YB_VENV_BASE_DIR}/${unique_sha}/$(basename ${root_dir})-venv"
 
-echo "Using venv_dir=${venv_dir}"
+verbose "Using venv_dir=${venv_dir}"
 
 if ! mkdir -p "${YB_VENV_BASE_DIR}"; then
   echo "Error creating YB_VENV_BASE_DIR '${YB_VENV_BASE_DIR}'"
@@ -96,16 +112,16 @@ if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]]; then
 fi
 
 if [[ -d ${venv_dir} ]]; then
-  echo "Using existing venv"
+  verbose "Using existing venv"
 else
-  echo "Creating new venv"
+  verbose "Creating new venv"
   case "${py_major_version}" in
-    2)
-      "${py_cmd}" -m pip install virtualenv --user
-      create_cmd="${py_cmd} -m virtualenv"
+    2) # python2 instalations don't always include pip
+      "${yb_python_interpreter}" -m pip install virtualenv --user >/dev/null 2>&1
+      create_cmd="${yb_python_interpreter} -m virtualenv"
       ;;
     3)
-      create_cmd="${py_cmd} -m venv"
+      create_cmd="${yb_python_interpreter} -m venv"
       ;;
     *)
       echo "Error determining venv creation command"
@@ -123,15 +139,17 @@ fi
 source "${venv_dir}/bin/activate"
 ## Update pip to latest
 pip install --upgrade pip
-echo "Installing ${reqs_file}"
+verbose "Installing ${reqs_file}"
 if ! out=$(pip install -r "${reqs_file}" 2>&1); then
-  echo "Error installing requirements from requirements.txt!"
+  echo "Error installing requirements from ${reqs_file}!"
   echo -e "${out}"
   exit 1
 fi
 
-if [[ "${refreeze}" == "true" ]]; then
-  echo "Recreating ${frzn_file}"
+verbose "${out}"
+
+if ${refreeze}; then
+  verbose "Recreating ${frzn_file}"
   echo "# YB_SHA: ${reqs_sha}" > "${frzn_file}"
   pip freeze >> "${frzn_file}"
 fi
