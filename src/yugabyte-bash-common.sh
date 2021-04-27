@@ -760,6 +760,12 @@ yb_deactivate_virtualenv() {
   fi
 }
 
+yb_filter_python_module_installation_output() {
+  # Adding "|| true", so we don't fail if every output line from pip is of the "Requirements already
+  # satisfied" form.
+  grep -Ev '^Requirement already satisfied: ' || true
+}
+
 # Creates (if necessary) and activates a virtualenv at a subdirectory (named
 # "$yb_virtuaenv_basename") of the given top-level directory. Also if there is a
 # requirements_frozen.txt or a requirements.txt file in that directory, installs the dependencies
@@ -809,12 +815,13 @@ yb_activate_virtualenv() {
       "$python_interpreter" -m venv "$venv_dir"
     else
       log "Automatically installing the virtualenv module"
-      "$python_interpreter" -m pip install virtualenv --user
+      "$python_interpreter" -m pip install virtualenv --user | \
+          yb_filter_python_module_installation_output
       "$python_interpreter" -m virtualenv "$venv_dir"
     fi
 
     if [[ $yb_virtualenv_upgrade_pip == "true" ]]; then
-      "$pip_path" install --upgrade pip
+      "$pip_path" install --upgrade pip | yb_filter_python_module_installation_output
     fi
   fi
 
@@ -829,9 +836,7 @@ yb_activate_virtualenv() {
     requirements_path=$frozen_requirements_path
   fi
   if [[ -f $requirements_path ]]; then
-    # Don't fail if every output line from pip is of the "Requirements already satisfied" form.
-    "$pip_path" install -r "$requirements_path" | \
-        ( grep -Ev '^Requirement already satisfied: ' || true )
+    "$pip_path" install -r "$requirements_path" | yb_filter_python_module_installation_output
   else
     log "Warning: no requirements.txt or requirements_frozen.txt found at $top_dir"
   fi
