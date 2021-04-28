@@ -22,17 +22,12 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   exit 1
 fi
 
-
-# TODO: Remove this check from setup_workstation.sh
 # -------------------------------------------------------------------------------------------------
-# Bash version validation
+# Bash version warning
 # -------------------------------------------------------------------------------------------------
 if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
-  echo "Bash 3 ($BASH_VERSION) is not supported!"
-  echo "Please install bash version 4 or newer and ensure it is at the start of your PATH."
-  exit 1
+  echo >&2 "This is Bash 3.x ($BASH_VERSION). Some scripts might not work as expected."
 fi
-
 
 # Allow the user of the library to decide if warnings should be fatal
 # We default to false meaning we don't fail on a warning.
@@ -134,8 +129,9 @@ detect_os() {
       case "${short_os_name}" in
         'ubuntu')
           is_ubuntu=true
-          ;& # This falls though to the next statement
-        'ubuntu'|'debian')
+          is_debian=true
+          ;;
+        'debian')
           is_debian=true
           ;;
         'centos')
