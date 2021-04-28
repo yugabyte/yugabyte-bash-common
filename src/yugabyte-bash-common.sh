@@ -124,7 +124,7 @@ detect_os() {
           is_ubuntu=true
           is_debian=true
           ;;
-        'ubuntu'|'debian')
+        'debian')
           is_debian=true
           ;;
         'centos')
