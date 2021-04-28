@@ -22,6 +22,13 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   exit 1
 fi
 
+# -------------------------------------------------------------------------------------------------
+# Bash version warning
+# -------------------------------------------------------------------------------------------------
+if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
+  echo >&2 "This is Bash 3.x ($BASH_VERSION). Some scripts might not work as expected."
+fi
+
 # Allow the user of the library to decide if warnings should be fatal
 # We default to false meaning we don't fail on a warning.
 FAIL_ON_WARNING=${FAIL_ON_WARNING:-false}
