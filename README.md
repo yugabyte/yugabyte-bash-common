@@ -80,7 +80,7 @@ fi
 
 ## User-overridable variables
 
-The `yb_python_interpeter` variable should be set to the deafult Python interpreter of your
+The `yb_python_interpeter` variable should be set to the default Python interpreter of your
 project. It is prefereable to use Python 3 as Python 2.7 is going away in 2020,
 e.g. `yb_python_interpeter=python3`. However, as of 03/2019 the default value of
 `yb_python_interpeter` in this library is `python2.7`.
