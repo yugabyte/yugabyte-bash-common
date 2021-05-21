@@ -8,6 +8,48 @@ complexity should be written in Python, not in Bash.
 
 ## Using this library in your project
 
+### Using a submodule-like technique
+
+Submodules might make switching branches more difficult. Here is how to import yugabyte-bash-common in a project using a submodule-style mechanism without actually creating a submodule.
+
+Create a file: yugabyte-bash-common-sha1.txt with the SHA1 of the target commit of the yugabyte-bash-common repository that you want to use.
+
+Create a script: `update-yugabyte-bash-common.sh`. The script assumes that is it in the root directory of the project but it could be placed in any directory, as long as the paths that it uses are updated accordingly.
+```
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+project_dir=$( cd "${BASH_SOURCE[0]%/*}" && pwd )
+set -euo pipefail
+
+target_sha1=$(<"$project_dir/yugabyte-bash-common-sha1.txt")
+if [[ ! $target_sha1 =~ ^[0-9a-f]{40}$ ]]; then
+  echo >&2 "Invalid yugabyte-bash-common SHA1: $sha1"
+  exit 1
+fi
+yugabyte_bash_common_dir=$project_dir/yugabyte-bash-common
+if [[ ! -d $yugabyte_bash_common_dir ]]; then
+  git clone https://github.com/yugabyte/yugabyte-bash-common.git "$yugabyte_bash_common_dir"
+fi
+cd "$yugabyte_bash_common_dir"
+current_sha1=$( git rev-parse HEAD )
+if [[ ! $current_sha1 =~ ^[0-9a-f]{40}$ ]]; then
+  echo >&2 "Could not get current git SHA1 in $PWD"
+  exit 1
+fi
+if [[ $current_sha1 != $target_sha1 ]]; then
+  if ! ( set -x; git checkout "$target_sha1" ); then
+    (
+      set -x
+      git fetch
+      git checkout "$target_sha1"
+    )
+  fi
+fi
+```
+
+### As a submodule
 First, in another project's git repository:
 ```bash
 git submodule add https://github.com/yugabyte/yugabyte-bash-common
