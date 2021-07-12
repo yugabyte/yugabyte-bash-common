@@ -40,13 +40,13 @@ function verbose() {
 function needs_refreeze() {
   local reqs_sha="${1}"
   local frzn_file="${2}"
-  local refreeze=false
+  local refreeze=`false`
   if [[ -f "${frzn_file}" ]]; then
     if ! grep "# YB_SHA: ${reqs_sha}" "${frzn_file}" >/dev/null 2>&1; then
-      refreeze=true
+      refreeze=`true`
     fi
   else
-    refreeze=true
+    refreeze=`true`
   fi
   return ${refreeze}
 }
@@ -81,19 +81,16 @@ reqs_sha="$(text_file_sha "${reqs_file}")"
 
 unique_input="${unique_input}$(sort -u "${reqs_file}")"
 
+refreeze=false
 if needs_refreeze "${reqs_sha}" "${frzn_file}"; then
   if ${YB_BUILD_STRICT}; then
     echo "YB_BUILD_STRICT: ${frzn_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
     exit 1
   fi
+  refreeze=true
 else
   reqs_file="${frzn_file}"
   unique_input="${unique_input}$(sort -u "${frzn_file}")"
-fi
-unique_input="${unique_input}$(sort -u "${frzn_file}")"
-if ${refreeze} && ${YB_BUILD_STRICT}; then
-  echo "YB_BUILD_STRICT: ${frzn_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
-  exit 1
 fi
 
 unique_sha=$(sha256sum - <<<"${unique_input}"| awk '{print $1}')
