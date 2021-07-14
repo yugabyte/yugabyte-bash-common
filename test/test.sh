@@ -477,7 +477,7 @@ fi
 TEST_TMPDIR=/tmp/yugabyte-bash-common-test.$$.$RANDOM.$RANDOM.$RANDOM
 mkdir -p "$TEST_TMPDIR"
 
-trap cleanup EXIT
+#trap cleanup EXIT
 
 global_exit_code=0
 test_fn_names=$(

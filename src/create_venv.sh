@@ -96,30 +96,26 @@ function yb_activate_virtualenv() {
   # externally mounted YB_VENV_BASE_DIR
   local unique_input
   unique_input="$(uname -s)$(uname -m)${yb_python_version_actual}"
-  if [[ ! -f "${reqs_file}" ]]; then
-    echo "WARNING: No requirements.txt file found!"
-    # shellcheck disable=SC2046
-    return $(true)
-  fi
-  local reqs_sha
-  reqs_sha="$(text_file_sha "${reqs_file}")"
-
-  local unique_input
-  unique_input="${unique_input}$(sort -u "${reqs_file}")"
-
   local refreeze=false
-  if needs_refreeze "${reqs_sha}" "${frzn_file}"; then
-    if ${YB_BUILD_STRICT}; then
-      echo "YB_BUILD_STRICT: ${frzn_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
-      # shellcheck disable=SC2046
-      return $(false)
+  if [[ -f "${reqs_file}" ]]; then
+    local reqs_sha
+    reqs_sha="$(text_file_sha "${reqs_file}")"
+    unique_input="${unique_input}$(sort -u "${reqs_file}")"
+    if needs_refreeze "${reqs_sha}" "${frzn_file}"; then
+      if ${YB_BUILD_STRICT}; then
+        echo "YB_BUILD_STRICT: ${frzn_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
+        # shellcheck disable=SC2046
+        return $(false)
+      fi
+      refreeze=true
+    else
+      reqs_file="${frzn_file}"
+      unique_input="${unique_input}$(sort -u "${frzn_file}")"
     fi
-    refreeze=true
   else
-    reqs_file="${frzn_file}"
-    unique_input="${unique_input}$(sort -u "${frzn_file}")"
+    echo "WARNING: No requirements.txt file found!"
   fi
-
+  
   # By default we create a unique VENV dir based on a combination of python version, OS, arch,
   # and the non-comment contents of the requirements.txt file.  If YB_USE_TOP_LEVEL_VENV is set
   # true we fall back to the older behaviour of using a directory called 'venv' in the same
@@ -183,11 +179,13 @@ function yb_activate_virtualenv() {
     # shellcheck disable=SC2046
     return $(false)
   fi
-  verbose "Installing ${reqs_file}"
-  if ! out=$(pip install -r "${reqs_file}" 2>&1); then
-    warn "Error installing requirements from ${reqs_file}!\n${out}"
-    # shellcheck disable=SC2046
-    return $(false)
+  if [[ -f "${reqs_file}" ]]; then
+    verbose "Installing ${reqs_file}"
+    if ! out=$(pip install -r "${reqs_file}" 2>&1); then
+      warn "Error installing requirements from ${reqs_file}!\n${out}"
+      # shellcheck disable=SC2046
+      return $(false)
+    fi
   fi
 
   verbose "${out}"
