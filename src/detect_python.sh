@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Copyright (c) YugaByte, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
@@ -19,15 +20,23 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   exit 1
 fi
 
+run_python() {
+  "$yb_python_interpreter" "$@"
+}
+
 readonly YB_PYTHON_VERSION=${YB_PYTHON_VERSION:-3.7}
 #export YB_PYTHON_VERSION
-readonly py_major_version=$(cut -f1 -d. <<<"${YB_PYTHON_VERSION}")
+py_major_version=$(cut -f1 -d. <<<"${YB_PYTHON_VERSION}")
+readonly py_major_version
 #export py_major_version
 yb_python_interpreter=''
 for cmd in "python${YB_PYTHON_VERSION}" "python${py_major_version}" "python"; do
   if cmd="$(command -v "${cmd}")"; then
     if "${cmd}" --version 2>&1 | grep "${YB_PYTHON_VERSION}" >/dev/null 2>&1; then
       yb_python_interpreter="${cmd}"
+      yb_python_version_actual="$(${cmd} --version 2>&1 | awk '{print $2}')"
+      # shellcheck disable=SC2034
+      readonly yb_python_version_actual
       break
     fi
   fi

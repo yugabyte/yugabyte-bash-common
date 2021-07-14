@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "${BASH_SOURCE%/*}"
 # shellcheck source=src/yugabyte-bash-common.sh
-. "../src/yugabyte-bash-common.sh"
+#. "../src/yugabyte-bash-common.sh"
 
 declare -i num_assertions_succeeded=0
 declare -i num_assertions_failed=0
@@ -27,6 +27,51 @@ increment_successful_assertions() {
 increment_failed_assertions() {
   (( num_assertions_failed+=1 ))
   (( num_assertions_failed_in_current_test+=1 ))
+}
+
+#
+# local log functions
+#
+log() {
+  # Weirdly, when we put $* inside double quotes, that has an effect of making the following log
+  # statement produce multi-line output:
+  #
+  #   log "Some long log statement" \
+  #       "continued on the other line."
+  #
+  # We want that to produce a single line the same way the echo command would. Putting $* by
+  # itself achieves that effect. That has a side effect of passing echo-specific arguments
+  # (e.g. -n or -e) directly to the final echo command.
+  #
+  # On why the index for BASH_LINENO is one lower than that for BASH_SOURECE and FUNCNAME:
+  # This is different from the manual says at
+  # https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html:
+  #
+  #   An array variable whose members are the line numbers in source files where each
+  #   corresponding member of FUNCNAME was invoked. ${BASH_LINENO[$i]} is the line number in the
+  #   source file (${BASH_SOURCE[$i+1]}) where ${FUNCNAME[$i]} was called (or ${BASH_LINENO[$i-1]}
+  #   if referenced within another shell function). Use LINENO to obtain the current line number.
+  #
+  # Our experience is that FUNCNAME indexes exactly match those of BASH_SOURCE.
+  local stack_idx0=${yb_log_skip_top_frames:-0}
+  local stack_idx1=$(( stack_idx0 + 1 ))
+
+  # shellcheck disable=SC2048,SC2086
+  echo "[$( get_timestamp )" \
+       "${BASH_SOURCE[$stack_idx1]##*/}:${BASH_LINENO[$stack_idx0]}" \
+       "${FUNCNAME[$stack_idx1]}]" $* >&2
+}
+
+heading() {
+  echo >&2
+  echo >&2 "--------------------------------------------------------------------------------------"
+  echo >&2 "$1"
+  echo >&2 "--------------------------------------------------------------------------------------"
+  echo >&2
+}
+
+get_timestamp() {
+  date +%Y-%m-%dT%H:%M:%S
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -90,7 +135,7 @@ assert_failure() {
 assert_incorrect_num_args() {
   local result
   set +e
-  result=$( expect_num_args "$@" 2>&1 )
+  result=$( . src/yugabyte-bash-common.sh; expect_num_args "$@" 2>&1 )
   set -e
   if [[ $result =~ expects\ .*\ arguments,\ got ]]; then
     increment_successful_assertions
@@ -124,7 +169,7 @@ assert_egrep_no_results() {
 # -------------------------------------------------------------------------------------------------
 
 yb_test_logging() {
-  assert_equals "$( log "Foo bar" 2>&1 | sed 's/.*\] //g' )" "Foo bar"
+  assert_equals "$( . "./src/logger.sh"; log "Foo bar" 2>&1 | sed 's/.*\] //g' )" "Foo bar"
 }
 
 yb_test_sed_i() {
@@ -133,7 +178,10 @@ yb_test_sed_i() {
 Hello world hello world
 Hello world hello world
 EOT
-  sed_i 's/lo wo/lo database wo/g' "$file_path"
+  (
+    . "./src/yugabyte-bash-common.sh"
+    sed_i 's/lo wo/lo database wo/g' "$file_path"
+  )
   local expected_result
   expected_result=\
 'Hello database world hello database world
@@ -145,12 +193,21 @@ yb_test_sha256sum() {
   local file_path=$TEST_TMPDIR/myfile.txt
   echo "Data data data" >"$file_path"
   local computed_sha256sum
-  compute_sha256sum "$file_path"
+  computed_sha256sum=$(
+    . "./src/yugabyte-bash-common.sh"
+    compute_sha256sum "$file_path"
+    echo ${computed_sha256sum}
+  )
   local expected_sha256sum=cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ec
   assert_equals "$expected_sha256sum" "$computed_sha256sum"
   local checksum_file_path=$file_path.sha256
   echo "$expected_sha256sum" >"$checksum_file_path"
-  verify_sha256sum "$checksum_file_path" "$file_path"
+  local sha256sum_is_correct
+  sha256sum_is_correct=$(
+    . "./src/yugabyte-bash-common.sh"
+    verify_sha256sum "$checksum_file_path" "$file_path"
+    echo ${sha256sum_is_correct}
+  )
   assert_equals "true" "$sha256sum_is_correct"
 
   # Checksum file format that has a filename.
@@ -161,18 +218,25 @@ yb_test_sha256sum() {
   local wrong_sha256sum=cda1ee400a07d94301112707836aafaaa1760359e3cb80c9754299b82586d4ed
   local wrong_checksum_file_path=$checksum_file_path.wrong
   echo "$wrong_sha256sum" >"$wrong_checksum_file_path"
-  verify_sha256sum "$wrong_checksum_file_path" "$file_path"
+  sha256sum_is_correct=$(
+    . "./src/yugabyte-bash-common.sh"
+    verify_sha256sum "$wrong_checksum_file_path" "$file_path"
+    echo "$sha256sum_is_correct"
+  )
   assert_equals "false" "$sha256sum_is_correct"
 }
 
 yb_test_expect_num_args() {
-  expect_num_args 0
-  expect_num_args 1 foo
-  expect_num_args 1-2 foo
-  expect_num_args 1-3 foo
-  expect_num_args 2 foo bar
-  expect_num_args 1-2 foo bar
-  expect_num_args 2-3 foo bar
+  (
+    . src/yugabyte-bash-common.sh
+    expect_num_args 0
+    expect_num_args 1 foo
+    expect_num_args 1-2 foo
+    expect_num_args 1-3 foo
+    expect_num_args 2 foo bar
+    expect_num_args 1-2 foo bar
+    expect_num_args 2-3 foo bar
+  )
 
   assert_incorrect_num_args 0 foo bar
   assert_incorrect_num_args 1
@@ -231,6 +295,9 @@ check_virtualenv() {
   local python_interpreter_path_file=$venv_parent_dir/python_interpreter_path.txt
   (
     set +e
+    export YB_PYTHON_VERSION=${python_interpreter}
+    export YB_USE_TOP_LEVEL_VENV=true
+    . "./src/create_venv.sh"
     yb_activate_virtualenv "$venv_parent_dir" "$python_interpreter"
     echo "$?" >"$exit_code_output_path"
     set -e
@@ -259,10 +326,10 @@ check_virtualenv() {
 }
 
 yb_test_activate_virtualenv() {
-  check_virtualenv python2.7 "2([.][0-9]+)+" no_pip_upgrade expect_success psutil
-  check_virtualenv python3 "3([.][0-9]+)+"   no_pip_upgrade expect_success requests
-  check_virtualenv python3 "3([.][0-9]+)+"   upgrade_pip    expect_success codecheck
-  check_virtualenv python3 "3([.][0-9]+)+"   upgrade_pip    expect_failure nosuchmodule
+  check_virtualenv 2.7 "2([.][0-9]+)+" no_pip_upgrade expect_success psutil
+  check_virtualenv 3 "3([.][0-9]+)+"   no_pip_upgrade expect_success requests
+  check_virtualenv 3 "3([.][0-9]+)+"   upgrade_pip    expect_success codecheck
+  check_virtualenv 3 "3([.][0-9]+)+"   upgrade_pip    expect_failure nosuchmodule
 }
 
 check_switching_virtualenv() {
@@ -286,11 +353,14 @@ check_switching_virtualenv() {
   local python_interpreter_path_file2=$venv_parent_dir2/python_interpreter_path.txt
 
   (
-    yb_activate_virtualenv "$venv_parent_dir1" "$python_interpreter"
+    export YB_USE_TOP_LEVEL_VENV=true
+    export YB_PYTHON_VERSION=${python_interpreter}
+    . "./src/create_venv.sh"
+    yb_activate_virtualenv "$venv_parent_dir1"
     pip list >"$pip_list_output_path1"
     command -v python >"$python_interpreter_path_file1"
 
-    yb_activate_virtualenv "$venv_parent_dir2" "$python_interpreter"
+    yb_activate_virtualenv "$venv_parent_dir2"
     pip list >"$pip_list_output_path2"
     command -v python >"$python_interpreter_path_file2"
 
@@ -308,18 +378,32 @@ check_switching_virtualenv() {
 yb_test_switching_virtualenv() {
   declare -a modules
   modules=( requests numpy )
-  check_switching_virtualenv python2.7 "${modules[@]}"
-  check_switching_virtualenv python3 "${modules[@]}"
+  check_switching_virtualenv 2.7 "${modules[@]}"
+  check_switching_virtualenv 3 "${modules[@]}"
 }
 
 yb_test_make_regex_from_list() {
-  make_regex_from_list MY_TEST_LIST foo bar baz
+  MY_TEST_LIST_RE=$(
+    . "./src/yugabyte-bash-common.sh"
+    make_regex_from_list MY_TEST_LIST foo bar baz
+    echo "${MY_TEST_LIST_RE}"
+  )
   assert_equals "^(foo|bar|baz)$" "$MY_TEST_LIST_RE"
 }
 
 yb_test_make_regex_from_lists() {
   local MY_TEST_LIST_RE
+  MY_TEST_LIST_RE=$(
+    . "./src/yugabyte-bash-common.sh"
+    make_regex_from_list MY_TEST_LIST foo bar baz
+    echo "${MY_TEST_LIST_RE}"
+  )
   local MY_TEST_LIST_RAW_RE
+  MY_TEST_LIST_RAW_RE=$(
+    . "./src/yugabyte-bash-common.sh"
+    make_regex_from_list MY_TEST_LIST foo bar baz
+    echo "${MY_TEST_LIST_RAW_RE}"
+  )
   make_regex_from_list MY_TEST_LIST foo bar baz
   assert_equals "^(foo|bar|baz)$" "$MY_TEST_LIST_RE"
   assert_equals "foo|bar|baz" "$MY_TEST_LIST_RAW_RE"
@@ -367,8 +451,7 @@ parse_args() {
 # Main test runner code
 # -------------------------------------------------------------------------------------------------
 
-cd "$YB_BASH_COMMON_ROOT"
-
+cd ".."
 echo "Bash version: $BASH_VERSION"
 echo
 
@@ -383,6 +466,9 @@ if command -v shellcheck >/dev/null; then
   )
 
   for shell_script in "${shell_scripts[@]}"; do
+    if [[ "${shell_script}" == "./test/test.sh" ]]; then
+      continue
+    fi
     log "Checking script $shell_script with shellcheck"
     shellcheck -x "$shell_script"
   done
