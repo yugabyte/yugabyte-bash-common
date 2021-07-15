@@ -105,6 +105,8 @@ detect_os() {
   is_debian=false
   is_ubuntu=false
   is_centos=false
+  is_alma=false
+  is_rhel=false
   short_os_name="unknown_os"
 
   case $OSTYPE in
