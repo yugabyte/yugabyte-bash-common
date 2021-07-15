@@ -137,6 +137,12 @@ detect_os() {
         'centos')
           is_centos=true
           ;;
+        'almalinux')
+          is_alma=true
+          ;;
+        'rhel')
+          is_rhel=true
+          ;;
         *)
           warn "${short_os_name} is not a supported Linux distribution"
           ;;
@@ -157,6 +163,18 @@ is_linux() {
 
 is_centos() {
   [[ $is_centos == "true" ]]
+}
+
+is_alma() {
+  [[ $is_alma == "true" ]]
+}
+
+is_rhel() {
+  [[ $is_rhel == "true" ]]
+}
+
+is_redhat_family() {
+  [[ $is_rhel == "true" || $is_centos == "true" ||  $is_alma == "true" ]]
 }
 
 is_ubuntu() {
