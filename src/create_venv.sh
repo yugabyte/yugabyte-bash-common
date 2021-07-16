@@ -21,9 +21,9 @@ set -e -u -o pipefail
 
 DIR="${BASH_SOURCE%/*}"
 if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
-# shellcheck disable=SC1091
+# shellcheck disable=SC1091,SC1090
 . "${DIR}"/logger.sh
-# shellcheck disable=SC1091
+# shellcheck disable=SC1091,SC1090
 . "${DIR}"/detect_python.sh
 
 # -------------------------------------------------------------------------------------------------
