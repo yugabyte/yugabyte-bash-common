@@ -48,6 +48,7 @@ function text_file_sha() {
   local file="${1}"
   local tmp
   tmp="$(sort -u <<<"$(grep -v '^#' "${file}")")"
+  # shellcheck disable=SC2154
   awk '{print $1}'<<<"$(${yb_sha256sum} <<<"${tmp}")"
 }
 
