@@ -24,7 +24,7 @@ run_python() {
   "$yb_python_interpreter" "$@"
 }
 
-readonly YB_PYTHON_VERSION=${YB_PYTHON_VERSION:-3.6}
+readonly YB_PYTHON_VERSION=${YB_PYTHON_VERSION:-3}
 #export YB_PYTHON_VERSION
 py_major_version=$(cut -f1 -d. <<<"${YB_PYTHON_VERSION}")
 readonly py_major_version
