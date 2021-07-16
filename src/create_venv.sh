@@ -48,7 +48,7 @@ function text_file_sha() {
   local file="${1}"
   local tmp
   tmp="$(sort -u <<<"$(grep -v '^#' "${file}")")"
-  awk '{print $1}'<<<"$(sha256sum <<<"${tmp}")"
+  awk '{print $1}'<<<"$(${yb_sha256sum} <<<"${tmp}")"
 }
 
 function needs_refreeze() {
