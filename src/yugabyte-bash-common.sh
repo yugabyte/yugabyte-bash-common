@@ -34,11 +34,11 @@ fi
 # 
 DIR="${BASH_SOURCE%/*}"
 if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
-# shellcheck disable=SC1091
+# shellcheck disable=SC1091,SC1090
 . "${DIR}"/logger.sh
-# shellcheck disable=SC1091
+# shellcheck disable=SC1091,SC1090
 . "${DIR}"/detect_python.sh
-# shellcheck disable=SC1091
+# shellcheck disable=SC1091,SC1090
 . "${DIR}"/create_venv.sh
 
 yb_os_detected=false

@@ -69,7 +69,7 @@ function needs_refreeze() {
 # -------------------------------------------------------------------------------------------------
 # Main functions
 # -------------------------------------------------------------------------------------------------
-yb_deactivate_virtualenv() {
+function yb_deactivate_virtualenv() {
   if [[ -n ${VIRTUAL_ENV:-} && -f "$VIRTUAL_ENV/bin/activate" ]]; then
     set +u
     # The "deactivate" function is defined by virtualenv's "activate" script.
@@ -198,6 +198,6 @@ function yb_activate_virtualenv() {
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
-  yb_activate_virtualenv "$(pwd)" || exit 1
+  yb_activate_virtualenv "${1:-$(pwd)}" || exit 1
   echo "source '${VIRTUAL_ENV}/bin/activate'"
 fi
