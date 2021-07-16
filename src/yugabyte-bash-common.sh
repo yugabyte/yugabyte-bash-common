@@ -43,8 +43,6 @@ if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
 # shellcheck disable=SC1091,SC1090
 . "${DIR}"/create_venv.sh
 
-yb_os_detected=false
-
 # -------------------------------------------------------------------------------------------------
 # Git related
 # -------------------------------------------------------------------------------------------------
@@ -297,7 +295,10 @@ verify_sha256sum() {
 
 # Returns the result in the computed_sha256sum variable
 compute_sha256sum() {
-  computed_sha256sum=$(${yb_sha256sum} "$@" | awk '{print $1}')
+  computed_sha256sum=$(
+    # shellcheck disable=SC2154
+    ${yb_sha256sum} "$@" | awk '{print $1}'
+  )
   if [[ ! $computed_sha256sum =~ ^[0-9a-f]{64}$ ]]; then
     fatal "Could not compute SHA256 checksum, got '$computed_sha256sum' which is not a valid" \
           "SHA256 checksum. Arguments to compute_sha256sum: $*"

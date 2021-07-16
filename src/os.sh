@@ -23,6 +23,8 @@ detect_num_cpus() {
   fi
 }
 
+# We don't want to detect the OS more than once.
+yb_os_detected=false
 detect_os() {
   if "$yb_os_detected"; then
     return
@@ -142,4 +144,5 @@ yb_sha256sum='sha256sum'
 if [[ $OSTYPE =~ darwin ]]; then
   yb_sha256sum='shasum --binary --algorithm 256'
 fi
+# shellcheck disable=SC2034
 readonly yb_sha256sum
