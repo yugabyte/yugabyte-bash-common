@@ -37,6 +37,8 @@ if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
 # shellcheck disable=SC1091,SC1090
 . "${DIR}"/logger.sh
 # shellcheck disable=SC1091,SC1090
+. "${DIR}"/os.sh
+# shellcheck disable=SC1091,SC1090
 . "${DIR}"/detect_python.sh
 # shellcheck disable=SC1091,SC1090
 . "${DIR}"/create_venv.sh
@@ -55,136 +57,6 @@ get_current_git_sha1() {
   fi
 }
 
-# -------------------------------------------------------------------------------------------------
-# OS, CPU count, and cloud environment detection
-# -------------------------------------------------------------------------------------------------
-
-detect_num_cpus() {
-  if [[ ! ${YB_NUM_CPUS:-} =~ ^[0-9]+$ ]]; then
-    if is_linux; then
-      YB_NUM_CPUS=$(nproc)
-    elif is_mac; then
-      YB_NUM_CPUS=$(sysctl -n hw.ncpu)
-    else
-      fatal "Don't know how to detect the number of CPUs on OS $OSTYPE."
-    fi
-
-    if [[ ! $YB_NUM_CPUS =~ ^[0-9]+$ ]]; then
-      fatal "Invalid number of CPUs detected: '$YB_NUM_CPUS' (expected a number)."
-    fi
-  fi
-}
-
-detect_os() {
-  if "$yb_os_detected"; then
-    return
-  fi
-  is_mac=false
-  is_linux=false
-  is_debian=false
-  is_ubuntu=false
-  is_centos=false
-  is_alma=false
-  is_rhel=false
-  short_os_name="unknown_os"
-
-  case $OSTYPE in
-    darwin*)
-      # shellcheck disable=SC2034
-      is_mac=true
-      short_os_name="mac"
-    ;;
-    linux*)
-      is_linux=true
-      short_os_name="linux"
-    ;;
-    *)
-      fatal "Unknown operating system: $OSTYPE"
-    ;;
-  esac
-
-  if "$is_linux"; then
-    # Detect Linux flavor
-    if [[ -f /etc/os-release ]]; then
-      short_os_name=$(grep '^ID=' /etc/os-release | cut -d= -f2 | sed -e 's/^"//' -e 's/"$//')
-      case "${short_os_name}" in
-        'ubuntu')
-          is_ubuntu=true
-          is_debian=true
-          ;;
-        'debian')
-          is_debian=true
-          ;;
-        'centos')
-          is_centos=true
-          ;;
-        'almalinux')
-          is_alma=true
-          ;;
-        'rhel')
-          is_rhel=true
-          ;;
-        *)
-          warn "${short_os_name} is not a supported Linux distribution"
-          ;;
-      esac
-    fi
-  fi
-
-  readonly yb_os_detected=true
-}
-
-is_mac() {
-  [[ $OSTYPE =~ ^darwin ]]
-}
-
-is_linux() {
-  [[ $OSTYPE =~ ^linux ]]
-}
-
-is_centos() {
-  [[ $is_centos == "true" ]]
-}
-
-is_alma() {
-  [[ $is_alma == "true" ]]
-}
-
-is_rhel() {
-  [[ $is_rhel == "true" ]]
-}
-
-is_redhat_family() {
-  [[ $is_rhel == "true" || $is_centos == "true" ||  $is_alma == "true" ]]
-}
-
-is_ubuntu() {
-  [[ $is_ubuntu == "true" ]]
-}
-
-is_debian() {
-  [[ $is_debian == "true" ]]
-}
-
-# Detect if we're running on Google Compute Platform. We perform this check lazily as there might be
-# a bit of a delay resolving the domain name.
-detect_gcp() {
-  # How to detect if we're running on Google Compute Engine:
-  # https://cloud.google.com/compute/docs/instances/managing-instances#dmi
-  if [[ -n ${YB_PRETEND_WE_ARE_ON_GCP:-} ]] || \
-     curl metadata.google.internal --silent --output /dev/null --connect-timeout 1; then
-    readonly is_running_on_gcp_exit_code=0  # "true" exit code
-  else
-    readonly is_running_on_gcp_exit_code=1  # "false" exit code
-  fi
-}
-
-is_running_on_gcp() {
-  if [[ -z ${is_running_on_gcp_exit_code:-} ]]; then
-    detect_gcp
-  fi
-  return "$is_running_on_gcp_exit_code"
-}
 
 # -------------------------------------------------------------------------------------------------
 # Wrappers for common UNIX utilities
@@ -392,10 +264,6 @@ read_file_and_trim() {
 # SHA256 checksums
 # -------------------------------------------------------------------------------------------------
 
-run_sha256sum_on_mac() {
-  shasum --binary --algorithm 256 "$@"
-}
-
 # Output variable: sha256sum_is_correct
 verify_sha256sum() {
   expect_num_args 2 "$@"
@@ -429,13 +297,7 @@ verify_sha256sum() {
 
 # Returns the result in the computed_sha256sum variable
 compute_sha256sum() {
-  computed_sha256sum=$(
-    if [[ $OSTYPE =~ darwin ]]; then
-      run_sha256sum_on_mac "$@"
-    else
-      sha256sum "$@"
-    fi | awk '{print $1}'
-  )
+  computed_sha256sum=$(${yb_sha256sum} "$@" | awk '{print $1}')
   if [[ ! $computed_sha256sum =~ ^[0-9a-f]{64}$ ]]; then
     fatal "Could not compute SHA256 checksum, got '$computed_sha256sum' which is not a valid" \
           "SHA256 checksum. Arguments to compute_sha256sum: $*"
