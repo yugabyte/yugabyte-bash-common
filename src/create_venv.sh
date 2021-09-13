@@ -31,10 +31,16 @@ if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
 # -------------------------------------------------------------------------------------------------
 # Global variables used in this module
 # -------------------------------------------------------------------------------------------------
+# This preserves the current existing behavior of assuming requirements_frozen.txt is always
+# up to date.  TODO: default this to true to ensure frozen file is 'correct'
 YB_BUILD_STRICT=${YB_BUILD_STRICT:-false}
+# Set this to true to force recreation of requirements_frozen.txt
 YB_RECREATE_VIRTUALENV=${YB_RECREATE_VIRTUALENV:-false}
+# New-style VENV base dir, only used when YB_USE_TOP_LEVEL_VENV is false
 YB_VENV_BASE_DIR=${YB_VENV_BASE_DIR:-~/.venv/yb}
-YB_USE_TOP_LEVEL_VENV=${YB_USE_TOP_LEVEL_VENV:-false}
+# This preserves the current existing behavior of putting the VENV in the same dirextory
+# as requirements.txt
+YB_USE_TOP_LEVEL_VENV=${YB_USE_TOP_LEVEL_VENV:-true}
 
 verbose "Using YB_PYTHON_VERSION=${YB_PYTHON_VERSION}"
 # shellcheck disable=SC2154
