@@ -12,8 +12,8 @@
 # under the License.
 #
 
-[[ "${_YB_DETECT_PYTHON_SHLIB:=""}" == "yes" ]] && return 0
-_YB_DETECT_PYTHON_SHLIB=yes
+[[ "${_YB_DETECT_PYTHON_INCLUDED:=""}" == "yes" ]] && return 0
+_YB_DETECT_PYTHON_INCLUDED=yes
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   echo "${BASH_SOURCE[0]} must be sourced, not executed" >&2

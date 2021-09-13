@@ -13,8 +13,8 @@
 # under the License.
 #
 
-[[ "${_YB_CREATE_VENV_SHLIB:=""}" == "yes" ]] && return 0
-_YB_CREATE_VENV_SHLIB=yes
+[[ "${_YB_CREATE_VENV_INCLUDED:=""}" == "yes" ]] && return 0
+_YB_CREATE_VENV_INCLUDED=yes
 VERBOSE=${VERBOSE:-false}
 
 set -e -u -o pipefail

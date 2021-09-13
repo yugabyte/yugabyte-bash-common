@@ -12,8 +12,8 @@
 # under the License.
 #
 
-[[ "${_YB_LOGGER_SHLIB:=""}" == "yes" ]] && return 0
-_YB_LOGGER_SHLIB=yes
+[[ "${_YB_LOGGER_INCLUDED:=""}" == "yes" ]] && return 0
+_YB_LOGGER_INCLUDED=yes
 
 # -------------------------------------------------------------------------------------------------
 # Global variables used in this module
