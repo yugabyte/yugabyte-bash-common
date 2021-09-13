@@ -2,8 +2,6 @@
 
 set -euo pipefail
 cd "${BASH_SOURCE%/*}"
-# shellcheck source=src/yugabyte-bash-common.sh
-#. "../src/yugabyte-bash-common.sh"
 
 declare -i num_assertions_succeeded=0
 declare -i num_assertions_failed=0
@@ -477,7 +475,7 @@ fi
 TEST_TMPDIR=/tmp/yugabyte-bash-common-test.$$.$RANDOM.$RANDOM.$RANDOM
 mkdir -p "$TEST_TMPDIR"
 
-#trap cleanup EXIT
+trap cleanup EXIT
 
 global_exit_code=0
 test_fn_names=$(

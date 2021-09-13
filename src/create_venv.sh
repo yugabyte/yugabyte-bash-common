@@ -15,18 +15,18 @@
 
 [[ "${_YB_CREATE_VENV_INCLUDED:=""}" == "yes" ]] && return 0
 _YB_CREATE_VENV_INCLUDED=yes
-VERBOSE=${VERBOSE:-false}
+YB_VERBOSE=${YB_VERBOSE:-false}
 
 set -e -u -o pipefail
 
-DIR="${BASH_SOURCE%/*}"
-if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+_src_dir="${BASH_SOURCE%/*}"
+if [[ ! -d "${_src_dir}" ]]; then _src_dir="$PWD"; fi
 # shellcheck disable=SC1091,SC1090
-. "${DIR}"/logger.sh
+. "${_src_dir}"/logger.sh
 # shellcheck disable=SC1091,SC1090
-. "${DIR}"/os.sh
+. "${_src_dir}"/os.sh
 # shellcheck disable=SC1091,SC1090
-. "${DIR}"/detect_python.sh
+. "${_src_dir}"/detect_python.sh
 
 # -------------------------------------------------------------------------------------------------
 # Global variables used in this module
@@ -51,7 +51,7 @@ verbose "Using ${yb_python_interpreter} (${yb_python_version_actual})"
 # -------------------------------------------------------------------------------------------------
 
 function text_file_sha() {
-  local file="${1}"
+  local file=$1
   local tmp
   tmp="$(sort -u <<<"$(grep -v '^#' "${file}")")"
   # shellcheck disable=SC2154
@@ -59,12 +59,12 @@ function text_file_sha() {
 }
 
 function needs_refreeze() {
-  local reqs_sha="${1}"
-  local frzn_file="${2}"
+  local reqs_sha=$1
+  local frozen_file=$2
   local refreeze
   refreeze=$(false)
-  if [[ -f "${frzn_file}" ]]; then
-    if ! grep "# YB_SHA: ${reqs_sha}" "${frzn_file}" >/dev/null 2>&1; then
+  if [[ -f "${frozen_file}" ]]; then
+    if ! grep "# YB_SHA: ${reqs_sha}" "${frozen_file}" >/dev/null 2>&1; then
       refreeze=$(true)
     fi
   else
@@ -96,7 +96,7 @@ function yb_activate_virtualenv() {
 
   local root_dir=${1}
   local reqs_file="${root_dir}/requirements.txt"
-  local frzn_file="${root_dir}/requirements_frozen.txt"
+  local frozen_file="${root_dir}/requirements_frozen.txt"
 
   verbose "Using root_dir=${root_dir}"
   verbose "Using reqs_file=${reqs_file}"
@@ -110,16 +110,16 @@ function yb_activate_virtualenv() {
     local reqs_sha
     reqs_sha="$(text_file_sha "${reqs_file}")"
     unique_input="${unique_input}$(sort -u "${reqs_file}")"
-    if needs_refreeze "${reqs_sha}" "${frzn_file}"; then
+    if needs_refreeze "${reqs_sha}" "${frozen_file}"; then
       if ${YB_BUILD_STRICT}; then
-        echo "YB_BUILD_STRICT: ${frzn_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
+        echo "YB_BUILD_STRICT: ${frozen_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
         # shellcheck disable=SC2046
         return $(false)
       fi
       refreeze=true
     else
-      reqs_file="${frzn_file}"
-      unique_input="${unique_input}$(sort -u "${frzn_file}")"
+      reqs_file="${frozen_file}"
+      unique_input="${unique_input}$(sort -u "${frozen_file}")"
     fi
   else
     echo "WARNING: No requirements.txt file found!"
@@ -200,9 +200,9 @@ function yb_activate_virtualenv() {
   verbose "${out}"
 
   if ${refreeze}; then
-    verbose "Recreating ${frzn_file}"
-    echo "# YB_SHA: ${reqs_sha}" > "${frzn_file}"
-    pip freeze >> "${frzn_file}"
+    verbose "Recreating ${frozen_file}"
+    echo "# YB_SHA: ${reqs_sha}" > "${frozen_file}"
+    pip freeze >> "${frozen_file}"
   fi
 }
 

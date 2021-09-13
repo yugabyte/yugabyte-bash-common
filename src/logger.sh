@@ -81,9 +81,9 @@ get_timestamp_for_filenames() {
 # -------------------------------------------------------------------------------------------------
 
 function verbose() {
-  # Print our info messages to stderr and only when asked (VERBOSE=true).
+  # Print our info messages to stderr and only when asked (YB_VERBOSE=true).
   local msg="$*"
-  if [[ ${VERBOSE} == "true" ]]; then
+  if [[ ${YB_VERBOSE} == "true" ]]; then
     echo -e "${msg}" >&2
   fi
 }
