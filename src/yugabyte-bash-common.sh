@@ -29,40 +29,19 @@ if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
   echo >&2 "This is Bash 3.x ($BASH_VERSION). Some scripts might not work as expected."
 fi
 
-# Allow the user of the library to decide if warnings should be fatal
-# We default to false meaning we don't fail on a warning.
-FAIL_ON_WARNING=${FAIL_ON_WARNING:-false}
-
-# shellcheck disable=SC2034
-readonly YB_BASH_COMMON_ROOT=$( cd "${BASH_SOURCE/*}" && cd .. && pwd )
-
-# shellcheck disable=SC2034
-readonly YELLOW_COLOR="\033[0;33m"
-
-# shellcheck disable=SC2034
-readonly RED_COLOR="\033[0;31m"
-
-# shellcheck disable=SC2034
-readonly CYAN_COLOR="\033[0;36m"
-
-# shellcheck disable=SC2034
-readonly NO_COLOR="\033[0m"
-
-# shellcheck disable=SC2034
-# http://stackoverflow.com/questions/5349718/how-can-i-repeat-a-character-in-bash
-readonly HORIZONTAL_LINE=$( printf '=%.0s' {1..80} )
-
-# This could be switched to e.g. python3 or a Python interpreter in a specific location.
-yb_python_interpreter=python3
-
-# If this is set, pip in the virtualenv will be upgraded (but at most once).
-yb_virtualenv_upgrade_pip=false
-
-yb_os_detected=false
-
-# This is the name of virtual environment directories that will be created automatically inside
-# directories that contain a requirements.txt file by the yb_activate_virtualenv function.
-yb_virtualenv_basename=venv
+#
+# Pull in our needed libs
+# 
+DIR="${BASH_SOURCE%/*}"
+if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+# shellcheck disable=SC1091,SC1090
+. "${DIR}"/logger.sh
+# shellcheck disable=SC1091,SC1090
+. "${DIR}"/os.sh
+# shellcheck disable=SC1091,SC1090
+. "${DIR}"/detect_python.sh
+# shellcheck disable=SC1091,SC1090
+. "${DIR}"/create_venv.sh
 
 # -------------------------------------------------------------------------------------------------
 # Git related
@@ -76,136 +55,6 @@ get_current_git_sha1() {
   fi
 }
 
-# -------------------------------------------------------------------------------------------------
-# OS, CPU count, and cloud environment detection
-# -------------------------------------------------------------------------------------------------
-
-detect_num_cpus() {
-  if [[ ! ${YB_NUM_CPUS:-} =~ ^[0-9]+$ ]]; then
-    if is_linux; then
-      YB_NUM_CPUS=$(nproc)
-    elif is_mac; then
-      YB_NUM_CPUS=$(sysctl -n hw.ncpu)
-    else
-      fatal "Don't know how to detect the number of CPUs on OS $OSTYPE."
-    fi
-
-    if [[ ! $YB_NUM_CPUS =~ ^[0-9]+$ ]]; then
-      fatal "Invalid number of CPUs detected: '$YB_NUM_CPUS' (expected a number)."
-    fi
-  fi
-}
-
-detect_os() {
-  if "$yb_os_detected"; then
-    return
-  fi
-  is_mac=false
-  is_linux=false
-  is_debian=false
-  is_ubuntu=false
-  is_centos=false
-  is_alma=false
-  is_rhel=false
-  short_os_name="unknown_os"
-
-  case $OSTYPE in
-    darwin*)
-      # shellcheck disable=SC2034
-      is_mac=true
-      short_os_name="mac"
-    ;;
-    linux*)
-      is_linux=true
-      short_os_name="linux"
-    ;;
-    *)
-      fatal "Unknown operating system: $OSTYPE"
-    ;;
-  esac
-
-  if "$is_linux"; then
-    # Detect Linux flavor
-    if [[ -f /etc/os-release ]]; then
-      short_os_name=$(grep '^ID=' /etc/os-release | cut -d= -f2 | sed -e 's/^"//' -e 's/"$//')
-      case "${short_os_name}" in
-        'ubuntu')
-          is_ubuntu=true
-          is_debian=true
-          ;;
-        'debian')
-          is_debian=true
-          ;;
-        'centos')
-          is_centos=true
-          ;;
-        'almalinux')
-          is_alma=true
-          ;;
-        'rhel')
-          is_rhel=true
-          ;;
-        *)
-          warn "${short_os_name} is not a supported Linux distribution"
-          ;;
-      esac
-    fi
-  fi
-
-  readonly yb_os_detected=true
-}
-
-is_mac() {
-  [[ $OSTYPE =~ ^darwin ]]
-}
-
-is_linux() {
-  [[ $OSTYPE =~ ^linux ]]
-}
-
-is_centos() {
-  [[ $is_centos == "true" ]]
-}
-
-is_alma() {
-  [[ $is_alma == "true" ]]
-}
-
-is_rhel() {
-  [[ $is_rhel == "true" ]]
-}
-
-is_redhat_family() {
-  [[ $is_rhel == "true" || $is_centos == "true" ||  $is_alma == "true" ]]
-}
-
-is_ubuntu() {
-  [[ $is_ubuntu == "true" ]]
-}
-
-is_debian() {
-  [[ $is_debian == "true" ]]
-}
-
-# Detect if we're running on Google Compute Platform. We perform this check lazily as there might be
-# a bit of a delay resolving the domain name.
-detect_gcp() {
-  # How to detect if we're running on Google Compute Engine:
-  # https://cloud.google.com/compute/docs/instances/managing-instances#dmi
-  if [[ -n ${YB_PRETEND_WE_ARE_ON_GCP:-} ]] || \
-     curl metadata.google.internal --silent --output /dev/null --connect-timeout 1; then
-    readonly is_running_on_gcp_exit_code=0  # "true" exit code
-  else
-    readonly is_running_on_gcp_exit_code=1  # "false" exit code
-  fi
-}
-
-is_running_on_gcp() {
-  if [[ -z ${is_running_on_gcp_exit_code:-} ]]; then
-    detect_gcp
-  fi
-  return "$is_running_on_gcp_exit_code"
-}
 
 # -------------------------------------------------------------------------------------------------
 # Wrappers for common UNIX utilities
@@ -218,10 +67,6 @@ sed_i() {
   else
     sed -i "$@"
   fi
-}
-
-to_lowercase() {
-  tr '[:upper:]' '[:lower:]'
 }
 
 # For each file provided as an argument, gzip the given file if it exists and is not already
@@ -251,163 +96,6 @@ pushd() {
 
 popd() {
   command popd "$@" > /dev/null
-}
-
-# -------------------------------------------------------------------------------------------------
-# Timestamps
-# -------------------------------------------------------------------------------------------------
-
-get_timestamp() {
-  date +%Y-%m-%dT%H:%M:%S
-}
-
-get_timestamp_for_filenames() {
-  date +%Y-%m-%dT%H_%M_%S
-}
-
-# -------------------------------------------------------------------------------------------------
-# Logging and stack traces
-# -------------------------------------------------------------------------------------------------
-
-print_stack_trace() {
-  local -i i=${1:-1}  # Allow the caller to set the line number to start from.
-  echo "Stack trace:" >&2
-  while [[ $i -lt "${#FUNCNAME[@]}" ]]; do
-    echo "  ${BASH_SOURCE[$i]}:${BASH_LINENO[$((i - 1))]} ${FUNCNAME[$i]}" >&2
-    (( i+=1 ))
-  done
-}
-
-fatal() {
-  if [[ -n "${yb_fatal_quiet:-}" ]]; then
-    yb_log_quiet=$yb_fatal_quiet
-  else
-    yb_log_quiet=false
-  fi
-  yb_log_skip_top_frames=1
-  log "$@"
-  if ! "$yb_log_quiet"; then
-    print_stack_trace 2  # Exclude this line itself from the stack trace (start from 2nd line).
-  fi
-  exit "${yb_fatal_exit_code:-1}"
-}
-
-log_empty_line() {
-  if [[ ${yb_log_quiet:-} == "true" ]]; then
-    return
-  fi
-  echo >&2
-}
-
-log_separator() {
-  if [[ ${yb_log_quiet:-} == "true" ]]; then
-    return
-  fi
-  log_empty_line
-  echo >&2 "--------------------------------------------------------------------------------------"
-  log_empty_line
-}
-
-heading() {
-  if [[ ${yb_log_quiet:-} == "true" ]]; then
-    return
-  fi
-  log_empty_line
-  echo >&2 "--------------------------------------------------------------------------------------"
-  echo >&2 "$1"
-  echo >&2 "--------------------------------------------------------------------------------------"
-  log_empty_line
-}
-
-log() {
-  if [[ ${yb_log_quiet:-} == "true" ]]; then
-    return
-  fi
-  # Weirdly, when we put $* inside double quotes, that has an effect of making the following log
-  # statement produce multi-line output:
-  #
-  #   log "Some long log statement" \
-  #       "continued on the other line."
-  #
-  # We want that to produce a single line the same way the echo command would. Putting $* by
-  # itself achieves that effect. That has a side effect of passing echo-specific arguments
-  # (e.g. -n or -e) directly to the final echo command.
-  #
-  # On why the index for BASH_LINENO is one lower than that for BASH_SOURECE and FUNCNAME:
-  # This is different from the manual says at
-  # https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html:
-  #
-  #   An array variable whose members are the line numbers in source files where each
-  #   corresponding member of FUNCNAME was invoked. ${BASH_LINENO[$i]} is the line number in the
-  #   source file (${BASH_SOURCE[$i+1]}) where ${FUNCNAME[$i]} was called (or ${BASH_LINENO[$i-1]}
-  #   if referenced within another shell function). Use LINENO to obtain the current line number.
-  #
-  # Our experience is that FUNCNAME indexes exactly match those of BASH_SOURCE.
-  local stack_idx0=${yb_log_skip_top_frames:-0}
-  local stack_idx1=$(( stack_idx0 + 1 ))
-
-  # shellcheck disable=SC2048,SC2086
-  echo "[$( get_timestamp )" \
-       "${BASH_SOURCE[$stack_idx1]##*/}:${BASH_LINENO[$stack_idx0]}" \
-       "${FUNCNAME[$stack_idx1]}]" $* >&2
-}
-
-log_with_color() {
-  local log_color=$1
-  shift
-  log "$log_color$*$NO_COLOR"
-}
-
-warn() {
-  local stack_idx0=${yb_log_skip_top_frames:-0}
-  local stack_idx1=$(( stack_idx0 + 1 ))
-
-  # shellcheck disable=SC2048,SC2086
-  echo -e "[$( get_timestamp )" \
-    "${BASH_SOURCE[$stack_idx1]##*/}:${BASH_LINENO[$stack_idx0]}" \
-    "${FUNCNAME[$stack_idx1]}]" $* >&2
-
-  if ${FAIL_ON_WARNING}; then
-    exit 1
-  fi
-}
-
-log_file_existence() {
-  expect_num_args 1 "$@"
-  local file_name=$1
-  if [[ -L $file_name && -f $file_name ]]; then
-    log "Symlink exists and points to a file: $file_name"
-  elif [[ -L $file_name && -d $file_name ]]; then
-    log "Symlink exists and points to a directory: $file_name"
-  elif [[ -L $file_name ]]; then
-    log "Symlink exists but it might be broken: $file_name"
-  elif [[ -f $file_name ]]; then
-    log "File exists: $file_name"
-  elif [[ -d $file_name ]]; then
-    log "Directory exists: $file_name"
-  elif [[ ! -e $file_name ]]; then
-    log "File does not exist: $file_name"
-  else
-    log "File exists but we could not determine its type: $file_name"
-  fi
-}
-
-horizontal_line() {
-  echo "------------------------------------------------------------------------------------------"
-}
-
-thick_horizontal_line() {
-  echo "=========================================================================================="
-}
-
-debug_log_boolean_function_result() {
-  expect_num_args 1 "$@"
-  local fn_name=$1
-  if "$fn_name"; then
-    log "$fn_name is true"
-  else
-    log "$fn_name is false"
-  fi
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -457,6 +145,7 @@ expect_num_args() {
   local calling_func_name=${FUNCNAME[1]}
   shift
   if [[ $# -lt $num_args_lower_bound || $# -gt $num_args_upper_bound ]]; then
+    # shellcheck disable=SC2034
     yb_log_quiet=false
     if [[ $num_args_lower_bound -eq $num_args_upper_bound ]]; then
       local error_msg="$calling_func_name expects $expected_num_args arguments, got $#."
@@ -501,26 +190,6 @@ make_regex_from_list() {
   done
   eval "${list_var_name}_RE=\"^($regex)$\""
   eval "${list_var_name}_RAW_RE=\"$regex\""
-}
-
-# -------------------------------------------------------------------------------------------------
-# Colors
-# -------------------------------------------------------------------------------------------------
-
-yellow_color() {
-  echo -ne "$YELLOW_COLOR"
-}
-
-red_color() {
-  echo -ne "$RED_COLOR"
-}
-
-cyan_color() {
-  echo -ne "$CYAN_COLOR"
-}
-
-no_color() {
-  echo -ne "$NO_COLOR"
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -593,10 +262,6 @@ read_file_and_trim() {
 # SHA256 checksums
 # -------------------------------------------------------------------------------------------------
 
-run_sha256sum_on_mac() {
-  shasum --binary --algorithm 256 "$@"
-}
-
 # Output variable: sha256sum_is_correct
 verify_sha256sum() {
   expect_num_args 2 "$@"
@@ -631,11 +296,8 @@ verify_sha256sum() {
 # Returns the result in the computed_sha256sum variable
 compute_sha256sum() {
   computed_sha256sum=$(
-    if [[ $OSTYPE =~ darwin ]]; then
-      run_sha256sum_on_mac "$@"
-    else
-      sha256sum "$@"
-    fi | awk '{print $1}'
+    # shellcheck disable=SC2154
+    ${yb_sha256sum} "$@" | awk '{print $1}'
   )
   if [[ ! $computed_sha256sum =~ ^[0-9a-f]{64}$ ]]; then
     fatal "Could not compute SHA256 checksum, got '$computed_sha256sum' which is not a valid" \
@@ -748,114 +410,6 @@ set_java_home() {
   fi
   export JAVA_HOME=$new_java_home
   put_path_entry_first "$JAVA_HOME/bin"
-}
-
-# -------------------------------------------------------------------------------------------------
-# Python and virtualenv support
-# -------------------------------------------------------------------------------------------------
-
-run_python() {
-  "$yb_python_interpreter" "$@"
-}
-
-yb_deactivate_virtualenv() {
-  if [[ -n ${VIRTUAL_ENV:-} && -f "$VIRTUAL_ENV/bin/activate" ]]; then
-    local _old_virtual_env_dir=$VIRTUAL_ENV
-    set +u
-    # Ensure we properly "activate" the virtualenv and import all its Bash functions.
-    # shellcheck disable=SC1090
-    . "$VIRTUAL_ENV/bin/activate"
-    # The "deactivate" function is defined by virtualenv's "activate" script.
-    deactivate
-    set -u
-
-    # The deactivate function does not remove virtualenv's bin path from PATH (as of 02/11/2020),
-    # do it ourselves.
-    remove_path_entry "$_old_virtual_env_dir/bin"
-    unset PYTHONPATH
-  fi
-}
-
-yb_filter_python_module_installation_output() {
-  # Adding "|| true", so we don't fail if every output line from pip is of the "Requirements already
-  # satisfied" form.
-  grep -Ev '^Requirement already satisfied: ' || true
-}
-
-# Creates (if necessary) and activates a virtualenv at a subdirectory (named
-# "$yb_virtuaenv_basename") of the given top-level directory. Also if there is a
-# requirements_frozen.txt or a requirements.txt file in that directory, installs the dependencies
-# described by that file into the virtualenv. This opinionated setup creates a common structure
-# across multiple Python projects.
-#
-# Arguments:
-#   - Parent directory of the virtualenv
-#   - Python interpreter to use (optional)
-yb_activate_virtualenv() {
-  expect_num_args 1-2 "$@"
-  local top_dir=$1
-  if [[ ! -d $top_dir ]]; then
-    fatal "Top-level directory to create a virtualenv subdirectory in does not exist: $top_dir"
-  fi
-
-  # Use the project-wide Python interpreter by default.
-  local python_interpreter=$yb_python_interpreter
-  if [[ $# -ge 2 ]]; then
-    python_interpreter=$2
-  fi
-
-  local python_interpreter_basename=${python_interpreter##*/}
-  declare -i python_major_version
-  if [[ $python_interpreter_basename == python2.7 ]]; then
-    python_major_version=2
-  elif [[ $python_interpreter_basename == python3 ||
-          $python_interpreter_basename == python3.* ]]; then
-    python_major_version=3
-  else
-    fatal "Unsupported Python interpreter for virtual environment creation:" \
-          "'$python_interpreter_basename'"
-  fi
-  if [[ $yb_virtualenv_basename == */* ]]; then
-    fatal "yb_virtualenv_basename includes forward slashes: '$yb_virtualenv_basename'"
-  fi
-  local venv_dir=$top_dir/$yb_virtualenv_basename
-  yb_deactivate_virtualenv
-
-  local pip_path="$venv_dir/bin/pip"
-  if [[ $python_major_version -eq 3 ]]; then
-    pip_path+="3"
-  fi
-
-  if [[ ! -d $venv_dir ]]; then
-    if [[ $python_major_version -eq 3 ]]; then
-      "$python_interpreter" -m venv "$venv_dir"
-    else
-      log "Automatically installing the virtualenv module"
-      "$python_interpreter" -m pip install virtualenv --user | \
-          yb_filter_python_module_installation_output
-      "$python_interpreter" -m virtualenv "$venv_dir"
-    fi
-
-    if [[ $yb_virtualenv_upgrade_pip == "true" ]]; then
-      "$pip_path" install --upgrade pip | yb_filter_python_module_installation_output
-    fi
-  fi
-
-  set +u
-  # shellcheck disable=SC1090
-  . "$venv_dir"/bin/activate
-  set -u
-
-  local requirements_path=$top_dir/requirements.txt
-  local frozen_requirements_path=$top_dir/requirements_frozen.txt
-  if [[ -f $frozen_requirements_path ]]; then
-    requirements_path=$frozen_requirements_path
-  fi
-  if [[ -f $requirements_path ]]; then
-    "$pip_path" install -r "$requirements_path" | yb_filter_python_module_installation_output
-  else
-    log "Warning: no requirements.txt or requirements_frozen.txt found at $top_dir"
-  fi
 }
 
 # -------------------------------------------------------------------------------------------------
