@@ -75,6 +75,7 @@ function needs_refreeze() {
 # Recreate the venv if the python if it was created with a different version of python
 function venv_needs_recreation() {
   local venv_dir=$1
+  # shellcheck disable=SC1091,SC1090
   [[ -f "${venv_dir}/bin/activate" ]] \
     && [[ "$(run_python --version)" != "$(source "${venv_dir}/bin/activate" && python --version)" ]]
 }
