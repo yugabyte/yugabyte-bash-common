@@ -36,11 +36,11 @@ if [[ ! -d "${_src_dir}" ]]; then _src_dir="$PWD"; fi
 YB_BUILD_STRICT=${YB_BUILD_STRICT:-false}
 # Set this to true to force recreation of requirements_frozen.txt
 YB_RECREATE_VIRTUALENV=${YB_RECREATE_VIRTUALENV:-false}
-# New-style VENV base dir, only used when YB_USE_TOP_LEVEL_VENV is false
+# New-style VENV base dir, only used when YB_PUT_VENV_IN_PROJECT_DIR is false
 YB_VENV_BASE_DIR=${YB_VENV_BASE_DIR:-~/.venv/yb}
-# This preserves the current existing behavior of putting the VENV in the same dirextory
+# This preserves the current existing behavior of putting the VENV in the same directory
 # as requirements.txt
-YB_USE_TOP_LEVEL_VENV=${YB_USE_TOP_LEVEL_VENV:-true}
+YB_PUT_VENV_IN_PROJECT_DIR=${YB_PUT_VENV_IN_PROJECT_DIR:-true}
 
 verbose "Using YB_PYTHON_VERSION=${YB_PYTHON_VERSION}"
 # shellcheck disable=SC2154
@@ -50,15 +50,15 @@ verbose "Using ${yb_python_interpreter} (${yb_python_version_actual})"
 # Internal functions used in this module.  These shouldn't be called directly outside this module.
 # -------------------------------------------------------------------------------------------------
 
-function text_file_sha() {
+function ybcv::text_file_sha_ignore_comments() {
   local file=$1
   local tmp
-  tmp="$(sort -u <<<"$(grep -v '^#' "${file}")")"
+  tmp="$(sort -u <<<"$(grep -Ev '^[[:space:]]*#' "${file}")")"
   # shellcheck disable=SC2154
   awk '{print $1}'<<<"$(${yb_sha256sum} <<<"${tmp}")"
 }
 
-function needs_refreeze() {
+function ybcv::needs_refreeze() {
   local reqs_sha=$1
   local frozen_file=$2
   if [[ -f "${frozen_file}" ]]; then
@@ -73,7 +73,7 @@ function needs_refreeze() {
 }
 
 # Recreate the venv if the python if it was created with a different version of python
-function venv_needs_recreation() {
+function ybcv::venv_needs_recreation() {
   local venv_dir=$1
   # shellcheck disable=SC1091,SC1090
   [[ -f "${venv_dir}/bin/activate" ]] \
@@ -83,7 +83,7 @@ function venv_needs_recreation() {
 
 # This returns true if venv is generally useable but maybe not be up to date
 # e.g. a new module has been installed since creation
-function venv_needs_refresh() {
+function ybcv::venv_needs_refresh() {
   local venv_dir=$1
   local unique_sha=$2
 
@@ -126,7 +126,9 @@ function yb_deactivate_virtualenv() {
 #   - Parent directory of the virtualenv
 #   - Python interpreter to use (optional)
 function yb_activate_virtualenv() {
-  local root_dir=${1}
+  # Expand the path here, we don't want it to be .
+  local root_dir
+  root_dir=$(realpath "${1}")
   local reqs_file="${root_dir}/requirements.txt"
   local frozen_file="${root_dir}/requirements_frozen.txt"
 
@@ -134,7 +136,7 @@ function yb_activate_virtualenv() {
   # This is to support the use case in yugabyte-db:yb_build.sh
   local venv_dir=${2:-}
   # By default we create a unique VENV dir based on a combination of python version, OS, arch,
-  # and the non-comment contents of the requirements.txt file.  If YB_USE_TOP_LEVEL_VENV is set
+  # and the non-comment contents of the requirements.txt file.  If YB_PUT_VENV_IN_PROJECT_DIR is set
   # true we fall back to the older behaviour of using a directory called 'venv' in the same
   # directory that contains the requirements.txt file.  It is possible for this older style venv
   # dir to go out of date in a way that is hard to detect.
@@ -145,9 +147,9 @@ function yb_activate_virtualenv() {
   local refreeze=false
   if [[ -f "${reqs_file}" ]]; then
     local reqs_sha
-    reqs_sha="$(text_file_sha "${reqs_file}")"
+    reqs_sha="$(ybcv::text_file_sha_ignore_comments "${reqs_file}")"
     unique_input="${unique_input}$(sort -u "${reqs_file}")"
-    if needs_refreeze "${reqs_sha}" "${frozen_file}"; then
+    if ybcv::needs_refreeze "${reqs_sha}" "${frozen_file}"; then
       if ${YB_BUILD_STRICT}; then
         warn "YB_BUILD_STRICT: ${frozen_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
         # shellcheck disable=SC2046
@@ -163,13 +165,13 @@ function yb_activate_virtualenv() {
   fi
 
   local unique_sha
-  unique_sha=$(sha256sum - <<<"${unique_input}"| awk '{print $1}')
+  unique_sha=$(${yb_sha256sum} - <<<"${unique_input}"| awk '{print $1}')
 
   if [[ -z $venv_dir ]]; then
-    if ${YB_USE_TOP_LEVEL_VENV}; then
+    if ${YB_PUT_VENV_IN_PROJECT_DIR}; then
       venv_dir="$root_dir/venv"
     else
-      # This setup allows us switch to branches and then reuse an existing venv created in the past.
+      # This setup allows us switch branches and then reuse an existing venv created in the past.
       venv_dir="${YB_VENV_BASE_DIR}/${unique_sha}/$(basename "${root_dir}")-venv"
     fi
   fi
@@ -178,7 +180,7 @@ function yb_activate_virtualenv() {
   verbose "Using reqs_file=${reqs_file}"
   verbose "Using venv_dir=${venv_dir}"
 
-  if ! ${YB_USE_TOP_LEVEL_VENV}; then
+  if ! ${YB_PUT_VENV_IN_PROJECT_DIR}; then
     if ! mkdir -p "${YB_VENV_BASE_DIR}"; then
       warn "Error creating YB_VENV_BASE_DIR '${YB_VENV_BASE_DIR}'"
       return 1
@@ -186,7 +188,7 @@ function yb_activate_virtualenv() {
   fi
 
   # Remove the venv, we want to ensure it is fresh
-  if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]] || venv_needs_recreation "${venv_dir}"; then
+  if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]] || ybcv::venv_needs_recreation "${venv_dir}"; then
     rm -rf "${venv_dir}"
   fi
 
@@ -221,7 +223,7 @@ function yb_activate_virtualenv() {
   if ! source "${venv_dir}/bin/activate"; then
     fatal "venv at ${venv_dir} failed to activate!"
   fi
-  if venv_needs_refresh "${venv_dir}" "${unique_sha}"; then
+  if ybcv::venv_needs_refresh "${venv_dir}" "${unique_sha}"; then
     verbose "Update pip to the latest version"
     ## Update pip to latest
     if ! out=$(pip install --upgrade pip 2>&1); then
@@ -248,10 +250,9 @@ function yb_activate_virtualenv() {
       pip freeze >> "${frozen_file}"
     fi
   fi
-
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
-  yb_activate_virtualenv "${@:1}" || exit 1
+  yb_activate_virtualenv "${1:-$(pwd)}" || exit 1
   log "To use this venv run the following: source '${VIRTUAL_ENV}/bin/activate'"
 fi

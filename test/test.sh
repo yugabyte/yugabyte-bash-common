@@ -402,7 +402,6 @@ yb_test_make_regex_from_lists() {
     make_regex_from_list MY_TEST_LIST foo bar baz
     echo "${MY_TEST_LIST_RAW_RE}"
   )
-  make_regex_from_list MY_TEST_LIST foo bar baz
   assert_equals "^(foo|bar|baz)$" "$MY_TEST_LIST_RE"
   assert_equals "foo|bar|baz" "$MY_TEST_LIST_RAW_RE"
 }
