@@ -13,9 +13,8 @@
 # under the License.
 #
 
-[[ "${_YB_CREATE_VENV_INCLUDED:=""}" == "yes" ]] && return 0
-_YB_CREATE_VENV_INCLUDED=yes
-YB_VERBOSE=${YB_VERBOSE:-false}
+[[ "${_YB_CREATE_VENV_INCLUDED:-}" == "true" ]] && return 0
+_YB_CREATE_VENV_INCLUDED="true"
 
 set -e -u -o pipefail
 
@@ -31,26 +30,31 @@ if [[ ! -d "${_src_dir}" ]]; then _src_dir="$PWD"; fi
 # -------------------------------------------------------------------------------------------------
 # Global variables used in this module
 # -------------------------------------------------------------------------------------------------
-# This preserves the current existing behavior of assuming requirements_frozen.txt is always
-# up to date.  TODO: default this to true to ensure frozen file is 'correct'
+
+# This preserves the legacy behavior as of 2/16/2022 of assuming requirements_frozen.txt is
+# always up to date.
+# TODO: default this to true to ensure frozen file is 'correct' before using it.
 YB_BUILD_STRICT=${YB_BUILD_STRICT:-false}
-# Set this to true to force recreation of requirements_frozen.txt
+
+# Set this to true to force recreation of requirements_frozen.txt.
 YB_RECREATE_VIRTUALENV=${YB_RECREATE_VIRTUALENV:-false}
-# New-style VENV base dir, only used when YB_PUT_VENV_IN_PROJECT_DIR is false
+
+# New-style VENV base dir, only used when YB_PUT_VENV_IN_PROJECT_DIR is false.
 YB_VENV_BASE_DIR=${YB_VENV_BASE_DIR:-~/.venv/yb}
+
 # This preserves the current existing behavior of putting the VENV in the same directory
 # as requirements.txt
 YB_PUT_VENV_IN_PROJECT_DIR=${YB_PUT_VENV_IN_PROJECT_DIR:-true}
 
-verbose "Using YB_PYTHON_VERSION=${YB_PYTHON_VERSION}"
+yb::verbose_log "Using YB_PYTHON_VERSION=${YB_PYTHON_VERSION}"
 # shellcheck disable=SC2154
-verbose "Using ${yb_python_interpreter} (${yb_python_version_actual})"
+yb::verbose_log "Using ${yb_python_interpreter} (${yb_python_version_actual})"
 
 # -------------------------------------------------------------------------------------------------
 # Internal functions used in this module.  These shouldn't be called directly outside this module.
 # -------------------------------------------------------------------------------------------------
 
-function ybcv::text_file_sha_ignore_comments() {
+function yb::venv::text_file_sha_ignore_comments() {
   local file=$1
   local tmp
   tmp="$(sort -u <<<"$(grep -Ev '^[[:space:]]*#' "${file}")")"
@@ -58,22 +62,24 @@ function ybcv::text_file_sha_ignore_comments() {
   awk '{print $1}'<<<"$(${yb_sha256sum} <<<"${tmp}")"
 }
 
-function ybcv::needs_refreeze() {
+function yb::venv::needs_refreeze() {
   local reqs_sha=$1
   local frozen_file=$2
   if [[ -f "${frozen_file}" ]]; then
     if ! grep "# YB_SHA: ${reqs_sha}" "${frozen_file}" >/dev/null 2>&1; then
+      yb::verbose_log "Refreezing '${frozen_file}', missing YB_SHA"
       return 0
     fi
   else
+    yb::verbose_log "Frozen file doesn't exist at '${frozen_file}', refreezing"
     return 0
   fi
-  # shellcheck disable=SC2086
-  false
+  yb::verbose_log "Frozen file is up to date"
+  return 1
 }
 
-# Recreate the venv if the python if it was created with a different version of python
-function ybcv::venv_needs_recreation() {
+# Recreate the venv if the python if it was created with a different version of python.
+function yb::venv::venv_needs_recreation() {
   local venv_dir=$1
   # shellcheck disable=SC1091,SC1090
   [[ -f "${venv_dir}/bin/activate" ]] \
@@ -81,30 +87,34 @@ function ybcv::venv_needs_recreation() {
 }
 
 
-# This returns true if venv is generally useable but maybe not be up to date
-# e.g. a new module has been installed since creation
-function ybcv::venv_needs_refresh() {
+# This returns true if venv is generally usable but maybe not be up to date
+# e.g. a new module has been installed since creation.
+function yb::venv::needs_refresh() {
   local venv_dir=$1
   local unique_sha=$2
 
-  # First check that no files are newer than our special sentry file
-  # Get the most recently modified file under the venv
+  # First check that no files are newer than our special sentry file.
+  # Get the most recently modified file under the venv.
+  # Taken from https://mywiki.wooledge.org/BashFAQ/099.
   local most_recent_file
-  most_recent_file=$(find "${venv_dir}" -type f -print0 \
-                     | xargs -0 stat --format '%Y :%y %n' \
-                     | sort -nr \
-                     | cut -d' ' -f5- \
-                     | head -1)
+  local files
+  files=(${venv_dir}/*)
+  most_recent_file=${files[0]}
+  for f in "${files[@]}"; do
+    if [[ $f -nt $most_recent_file ]]; then
+      most_recent_file=$f
+    fi
+  done
   if [[ "${most_recent_file}" == "${venv_dir}/YB_VENV_SHA" ]]; then
     # no modifications to venv since creation, check the SHA to ensure it was created with the
-    # correct requirements.txt and frozen_requirements.txt
+    # correct requirements.txt and frozen_requirements.txt.
     if [[ "${unique_sha}" == "$(cat "${venv_dir}/YB_VENV_SHA")" ]]; then
-      verbose "Existing venv is current and will be used as is."
+      yb::verbose_log "Existing venv is current and will be used as is."
       return 1
     fi
   fi
-  verbose "The venv needs refreshing"
-  true
+  yb::verbose_log "The venv needs refreshing"
+  return 0
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -126,42 +136,43 @@ function yb_deactivate_virtualenv() {
 #   - Parent directory of the virtualenv
 #   - Python interpreter to use (optional)
 function yb_activate_virtualenv() {
-  # Expand the path here, we don't want it to be .
+  # Expand the path here, we don't want it to be ".".
   local root_dir
   root_dir=$(realpath "${1}")
   local reqs_file="${root_dir}/requirements.txt"
   local frozen_file="${root_dir}/requirements_frozen.txt"
 
-  # Allow the caller to optionally pass in a venv path to use instead of trying to calculate it
-  # This is to support the use case in yugabyte-db:yb_build.sh
+  # Allow the caller to optionally pass in a venv path to use instead of trying to calculate it.
+  # Used in https://github.com/yugabyte/yugabyte-db/blob/master/yb_build.sh.
   local venv_dir=${2:-}
-  # By default we create a unique VENV dir based on a combination of python version, OS, arch,
-  # and the non-comment contents of the requirements.txt file.  If YB_PUT_VENV_IN_PROJECT_DIR is set
-  # true we fall back to the older behaviour of using a directory called 'venv' in the same
-  # directory that contains the requirements.txt file.  It is possible for this older style venv
-  # dir to go out of date in a way that is hard to detect.
+  # By default we create a directory called 'venv' in the same directory that contains the 
+  # requirements.txt file.
+  # By setting YB_PUT_VENV_IN_PROJECT_DIR=false, a unique VENV dir based on a combination of python
+  # version, OS, arch, and the non-comment contents of the requirements_frozen.txt file (or 
+  # requirements.txt if there is no frozen file).
   # Include the OS and h/w arch.  This allows to use a VM or container with a shared persistent
-  # externally mounted YB_VENV_BASE_DIR
+  # externally mounted YB_VENV_BASE_DIR.
   local unique_input
   unique_input="$(uname -s)$(uname -m)${yb_python_version_actual}"
   local refreeze=false
   if [[ -f "${reqs_file}" ]]; then
     local reqs_sha
-    reqs_sha="$(ybcv::text_file_sha_ignore_comments "${reqs_file}")"
+    reqs_sha="$(yb::venv::text_file_sha_ignore_comments "${reqs_file}")"
     unique_input="${unique_input}$(sort -u "${reqs_file}")"
-    if ybcv::needs_refreeze "${reqs_sha}" "${frozen_file}"; then
-      if ${YB_BUILD_STRICT}; then
+    if yb::venv::needs_refreeze "${reqs_sha}" "${frozen_file}"; then
+      if [[ "${YB_BUILD_STRICT}" == "true" ]]; then
         warn "YB_BUILD_STRICT: ${frozen_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
         # shellcheck disable=SC2046
         return 1
       fi
+      yb::verbose_log "Setting refreeze to true"
       refreeze=true
     else
       reqs_file="${frozen_file}"
       unique_input="${unique_input}$(sort -u "${frozen_file}")"
     fi
   else
-    warn "WARNING: No requirements.txt file found!"
+    warn "WARNING: No requirements.txt file found in '${root_dir}'!"
   fi
 
   local unique_sha
@@ -176,9 +187,9 @@ function yb_activate_virtualenv() {
     fi
   fi
 
-  verbose "Using root_dir=${root_dir}"
-  verbose "Using reqs_file=${reqs_file}"
-  verbose "Using venv_dir=${venv_dir}"
+  yb::verbose_log "Using root_dir=${root_dir}"
+  yb::verbose_log "Using reqs_file=${reqs_file}"
+  yb::verbose_log "Using venv_dir=${venv_dir}"
 
   if ! ${YB_PUT_VENV_IN_PROJECT_DIR}; then
     if ! mkdir -p "${YB_VENV_BASE_DIR}"; then
@@ -187,20 +198,20 @@ function yb_activate_virtualenv() {
     fi
   fi
 
-  # Remove the venv, we want to ensure it is fresh
-  if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]] || ybcv::venv_needs_recreation "${venv_dir}"; then
+  # Remove the venv, we want to ensure it is fresh.
+  if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]] || yb::venv::venv_needs_recreation "${venv_dir}"; then
     rm -rf "${venv_dir}"
   fi
 
-  # The venv was modifed after creation OR it was created with a different requirements.txt file
+  # The venv was modifed after creation OR it was created with a different requirements.txt file.
   if [[ -d ${venv_dir} ]]; then
-    verbose "Using existing venv"
+    yb::verbose_log "Using existing venv"
   else
-    verbose "Creating new venv"
+    yb::verbose_log "Creating new venv"
     local create_cmd=''
     # shellcheck disable=SC2154
     case "${py_major_version}" in
-      2) # python2 instalations don't always include pip
+      2) # python2 instalations don't always include pip.
         "${yb_python_interpreter}" -m pip install virtualenv --user >/dev/null 2>&1
         create_cmd="${yb_python_interpreter} -m virtualenv"
         ;;
@@ -223,16 +234,17 @@ function yb_activate_virtualenv() {
   if ! source "${venv_dir}/bin/activate"; then
     fatal "venv at ${venv_dir} failed to activate!"
   fi
-  if ybcv::venv_needs_refresh "${venv_dir}" "${unique_sha}"; then
-    verbose "Update pip to the latest version"
-    ## Update pip to latest
+
+  if yb::venv::needs_refresh "${venv_dir}" "${unique_sha}"; then
+    yb::verbose_log "Update pip to the latest version"
+    ## Update pip to latest.
     if ! out=$(pip install --upgrade pip 2>&1); then
       warn "Error installing pip!\n${out}"
       # shellcheck disable=SC2046
       return 1
     fi
     if [[ -f "${reqs_file}" ]]; then
-      verbose "Installing ${reqs_file}"
+      yb::verbose_log "Installing ${reqs_file}"
       if ! out=$(pip install -r "${reqs_file}" 2>&1); then
         warn "Error installing requirements from ${reqs_file}!\n${out}"
         # shellcheck disable=SC2046
@@ -242,10 +254,10 @@ function yb_activate_virtualenv() {
 
     echo "${unique_sha}" > "${venv_dir}/YB_VENV_SHA"
 
-    verbose "${out}"
+    yb::verbose_log "${out}"
 
-    if ${refreeze}; then
-      verbose "Recreating ${frozen_file}"
+    if [[ "${refreeze}" == "true" ]]; then
+      yb::verbose_log "Recreating ${frozen_file}"
       echo "# YB_SHA: ${reqs_sha}" > "${frozen_file}"
       pip freeze >> "${frozen_file}"
     fi

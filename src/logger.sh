@@ -12,16 +12,15 @@
 # under the License.
 #
 
-[[ "${_YB_LOGGER_INCLUDED:=""}" == "yes" ]] && return 0
-_YB_LOGGER_INCLUDED=yes
-
+[[ "${_YB_LOGGER_INCLUDED:-}" == "true" ]] && return 0
+_YB_LOGGER_INCLUDED=true
 # -------------------------------------------------------------------------------------------------
 # Global variables used in this module
 # -------------------------------------------------------------------------------------------------
 yb_fatal_quiet=${yb_fatal_quiet:-false}
 yb_log_quiet=${yb_log_quiet:-false}
 FAIL_ON_WARNING=${FAIL_ON_WARNING:-false}
-
+YB_VERBOSE=${YB_VERBOSE:-false}
 # -------------------------------------------------------------------------------------------------
 # Global variables defined in this module
 # -------------------------------------------------------------------------------------------------
@@ -80,7 +79,7 @@ get_timestamp_for_filenames() {
 # Logging and stack traces
 # -------------------------------------------------------------------------------------------------
 
-function verbose() {
+function yb::verbose_log() {
   # Print our info messages to stderr and only when asked (YB_VERBOSE=true).
   local msg="$*"
   if [[ ${YB_VERBOSE} == "true" ]]; then
@@ -98,7 +97,7 @@ print_stack_trace() {
 }
 
 fatal() {
-  if [[ -n "${yb_fatal_quiet:-}" ]]; then
+  if [[ -n "${yb_fatal_quiet}" ]]; then
     yb_log_quiet=$yb_fatal_quiet
   else
     yb_log_quiet=false
@@ -112,14 +111,14 @@ fatal() {
 }
 
 log_empty_line() {
-  if [[ ${yb_log_quiet:-} == "true" ]]; then
+  if [[ ${yb_log_quiet} == "true" ]]; then
     return
   fi
   echo >&2
 }
 
 log_separator() {
-  if [[ ${yb_log_quiet:-} == "true" ]]; then
+  if [[ ${yb_log_quiet} == "true" ]]; then
     return
   fi
   log_empty_line
@@ -128,7 +127,7 @@ log_separator() {
 }
 
 heading() {
-  if [[ ${yb_log_quiet:-} == "true" ]]; then
+  if [[ ${yb_log_quiet} == "true" ]]; then
     return
   fi
   log_empty_line
@@ -139,7 +138,7 @@ heading() {
 }
 
 log() {
-  if [[ ${yb_log_quiet:-} == "true" ]]; then
+  if [[ ${yb_log_quiet} == "true" ]]; then
     return
   fi
   # Weirdly, when we put $* inside double quotes, that has an effect of making the following log

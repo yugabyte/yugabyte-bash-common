@@ -12,8 +12,8 @@
 # under the License.
 #
 
-[[ "${_YB_DETECT_PYTHON_INCLUDED:=""}" == "yes" ]] && return 0
-_YB_DETECT_PYTHON_INCLUDED=yes
+[[ "${_YB_DETECT_PYTHON_INCLUDED:-}" == "true" ]] && return 0
+_YB_DETECT_PYTHON_INCLUDED=true
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   echo "${BASH_SOURCE[0]} must be sourced, not executed" >&2
@@ -26,7 +26,7 @@ run_python() {
 
 readonly YB_PYTHON_VERSION=${YB_PYTHON_VERSION:-3}
 #export YB_PYTHON_VERSION
-py_major_version=$(cut -f1 -d. <<<"${YB_PYTHON_VERSION}")
+py_major_version=${YB_PYTHON_VERSION%%.*}
 readonly py_major_version
 #export py_major_version
 yb_python_interpreter=''
