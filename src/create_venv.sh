@@ -98,6 +98,7 @@ function yb::venv::needs_refresh() {
   # Taken from https://mywiki.wooledge.org/BashFAQ/099.
   local most_recent_file
   local files
+  # shellcheck disable=SC2206
   files=(${venv_dir}/*)
   most_recent_file=${files[0]}
   for f in "${files[@]}"; do
@@ -133,8 +134,8 @@ function yb_deactivate_virtualenv() {
 }
 
 # Arguments:
-#   - Parent directory of the virtualenv
-#   - Python interpreter to use (optional)
+#   - Directory containing the requirements.txt file
+#   - Venv directory (optional)
 function yb_activate_virtualenv() {
   # Expand the path here, we don't want it to be ".".
   local root_dir
