@@ -16,8 +16,8 @@
 # OS, CPU count, and cloud environment detection
 # -------------------------------------------------------------------------------------------------
 
-[[ "${_YB_OS_INCLUDED:=""}" == "yes" ]] && return 0
-_YB_OS_INCLUDED=yes
+[[ "${_YB_OS_INCLUDED:-}" == "true" ]] && return 0
+_YB_OS_INCLUDED=true
 
 # -------------------------------------------------------------------------------------------------
 # functions
