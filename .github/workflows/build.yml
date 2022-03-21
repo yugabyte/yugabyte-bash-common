@@ -66,7 +66,10 @@ jobs:
                 test/test.sh
               "
           elif [[ $OSTYPE == darwin* ]]; then
-            brew install bash # This should pull in the correct bash version
+            # Pull in recent bash (mac ships with v3, this pulls in v5 as of 2/16/2022).
+            # Also install coreutils as it is a standard part of our mac development environemnt.
+            # Coreutils provides 'realpath' which this lib uses.
+            brew install bash coreutils
             export PATH="/usr/local/bin:${PATH}"
             system_profiler SPSoftwareDataType
             sw_vers
