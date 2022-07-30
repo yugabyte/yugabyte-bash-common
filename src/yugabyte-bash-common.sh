@@ -25,9 +25,6 @@ fi
 # -------------------------------------------------------------------------------------------------
 # Bash version warning
 # -------------------------------------------------------------------------------------------------
-if [[ "$BASH_VERSION" =~ ^3[.] ]]; then
-  echo >&2 "This is Bash 3.x ($BASH_VERSION). Some scripts might not work as expected."
-fi
 
 #
 # Pull in our needed libs
