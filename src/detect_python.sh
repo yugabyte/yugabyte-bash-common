@@ -34,7 +34,7 @@ for cmd in "python${YB_PYTHON_VERSION}" "python${py_major_version}" "python"; do
   if cmd="$(command -v "${cmd}")"; then
     if "${cmd}" --version 2>&1 | grep "${YB_PYTHON_VERSION}" >/dev/null 2>&1; then
       yb_python_interpreter="${cmd}"
-      yb_python_version_actual="$(${cmd} --version 2>&1 | awk '{print $2}')"
+      yb_python_version_actual=$(${cmd} --version 2>&1 | awk '{print $NF}')
       # shellcheck disable=SC2034
       readonly yb_python_version_actual
       break
