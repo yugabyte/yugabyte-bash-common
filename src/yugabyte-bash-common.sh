@@ -401,7 +401,7 @@ set_java_home() {
     local new_java_home
     new_java_home=$( "${cmd_to_get_java_home[@]}" )
     if [[ ! -d ${new_java_home} ]]; then
-      fatal "Directory returned by '$cmd_to_get_java_home' does not exist: ${new_java_home}"
+      fatal "Directory returned by '${cmd_to_get_java_home[*]}' does not exist: ${new_java_home}"
     fi
     export JAVA_HOME=${new_java_home}
   fi
