@@ -28,7 +28,7 @@ fi
 
 #
 # Pull in our needed libs
-# 
+#
 DIR="${BASH_SOURCE%/*}"
 if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
 # shellcheck disable=SC1091,SC1090
@@ -389,24 +389,23 @@ run_with_retries() {
 # Java support
 # -------------------------------------------------------------------------------------------------
 
+YB_JAVA_VERSION=${YB_JAVA_VERSION:-1.8}
+
 set_java_home() {
   if ! is_mac; then
     return
   fi
-  # macOS has a peculiar way of setting JAVA_HOME
-  local cmd_to_get_java_home="/usr/libexec/java_home --version 1.8"
-  local new_java_home
-  new_java_home=$( $cmd_to_get_java_home )
-  if [[ ! -d $new_java_home ]]; then
-    fatal "Directory returned by '$cmd_to_get_java_home' does not exist: $new_java_home"
+  if [[ -z ${JAVA_HOME:-} ]]; then
+    # macOS has a peculiar way of setting JAVA_HOME
+    local cmd_to_get_java_home=( /usr/libexec/java_home --version "${YB_JAVA_VERSION}" )
+    local new_java_home
+    new_java_home=$( "${cmd_to_get_java_home[@]}" )
+    if [[ ! -d ${new_java_home} ]]; then
+      fatal "Directory returned by '${cmd_to_get_java_home[*]}' does not exist: ${new_java_home}"
+    fi
+    export JAVA_HOME=${new_java_home}
   fi
-  if [[ -n ${JAVA_HOME:-} && $JAVA_HOME != "$new_java_home" ]]; then
-    log "Warning: updating JAVA_HOME from $JAVA_HOME to $new_java_home"
-  else
-    log "Setting JAVA_HOME: $new_java_home"
-  fi
-  export JAVA_HOME=$new_java_home
-  put_path_entry_first "$JAVA_HOME/bin"
+  put_path_entry_first "${JAVA_HOME}/bin"
 }
 
 # -------------------------------------------------------------------------------------------------
