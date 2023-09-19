@@ -57,7 +57,7 @@ yb::verbose_log "Using ${yb_python_interpreter} (${yb_python_version_actual})"
 function yb::venv::text_file_sha_ignore_comments() {
   local file=$1
   local tmp
-  tmp="$(LC_COLLATE=C.UTF8 sort -u <<<"$(grep -Ev '^[[:space:]]*#' "${file}")")"
+  tmp="$(LC_COLLATE=C sort -u <<<"$(grep -Ev '^[[:space:]]*#' "${file}")")"
   # shellcheck disable=SC2154
   awk '{print $1}'<<<"$(${yb_sha256sum} <<<"${tmp}")"
 }
@@ -164,7 +164,7 @@ function yb_activate_virtualenv() {
   if [[ -f "${reqs_file}" ]]; then
     local reqs_sha
     reqs_sha="$(yb::venv::text_file_sha_ignore_comments "${reqs_file}")"
-    unique_input="${unique_input}$(LC_COLLATE=C.UTF8 sort -u "${reqs_file}")"
+    unique_input="${unique_input}$(LC_COLLATE=C sort -u "${reqs_file}")"
     if yb::venv::needs_refreeze "${reqs_sha}" "${frozen_file}"; then
       if [[ "${YB_BUILD_STRICT}" == "true" ]]; then
         warn "YB_BUILD_STRICT: ${frozen_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
@@ -175,7 +175,7 @@ function yb_activate_virtualenv() {
       refreeze=true
     else
       reqs_file="${frozen_file}"
-      unique_input="${unique_input}$(LC_COLLATE=C.UTF8 sort -u "${frozen_file}")"
+      unique_input="${unique_input}$(LC_COLLATE=C sort -u "${frozen_file}")"
     fi
   else
     warn "WARNING: No requirements.txt file found in '${root_dir}'!"
