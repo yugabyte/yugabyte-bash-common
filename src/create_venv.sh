@@ -54,6 +54,9 @@ yb::verbose_log "Using ${yb_python_interpreter} (${yb_python_version_actual})"
 # Internal functions used in this module.  These shouldn't be called directly outside this module.
 # -------------------------------------------------------------------------------------------------
 
+# Needed for deterministic sort order
+LC_COLLATE=C.UTF8
+
 function yb::venv::text_file_sha_ignore_comments() {
   local file=$1
   local tmp
@@ -67,7 +70,9 @@ function yb::venv::needs_refreeze() {
   local frozen_file=$2
   if [[ -f "${frozen_file}" ]]; then
     if ! grep "# YB_SHA: ${reqs_sha}" "${frozen_file}" >/dev/null 2>&1; then
-      yb::verbose_log "Refreezing '${frozen_file}', missing YB_SHA"
+      yb::verbose_log "Refreezing '${frozen_file}', YB_SHA mismatch."
+      yb::verbose_log "New: # YB_SHA: ${reqs_sha}"
+      yb::verbose_log "Old: $(grep YB_SHA "${frozen_file}")"
       return 0
     fi
   else
@@ -113,6 +118,9 @@ function yb::venv::needs_refresh() {
       yb::verbose_log "Existing venv is current and will be used as is."
       return 1
     fi
+    yb::verbose_log "${venv_dir}/YB_VENV_SHA is most recent file but wrong value."
+    yb::verbose_log "New: ${unique_sha}"
+    yb::verbose_log "Old: $(cat "${venv_dir}/YB_VENV_SHA")"
   fi
   yb::verbose_log "The venv needs refreshing"
   return 0
