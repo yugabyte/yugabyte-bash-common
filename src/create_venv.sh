@@ -159,7 +159,7 @@ function yb_activate_virtualenv() {
   # Include the OS and h/w arch.  This allows to use a VM or container with a shared persistent
   # externally mounted YB_VENV_BASE_DIR.
   local unique_input
-  unique_input="$(uname -s)$(uname -m)${yb_python_version_actual}"
+  unique_input="${yb_python_version_actual}"
   local refreeze=false
   if [[ -f "${reqs_file}" ]]; then
     local reqs_sha
@@ -205,7 +205,8 @@ function yb_activate_virtualenv() {
   fi
 
   # Remove the venv, we want to ensure it is fresh.
-  if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]] || yb::venv::venv_needs_recreation "${venv_dir}"; then
+  if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]] \
+        || yb::venv::venv_needs_recreation "${venv_dir}"; then
     rm -rf "${venv_dir}"
   fi
 
