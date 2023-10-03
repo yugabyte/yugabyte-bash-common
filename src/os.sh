@@ -19,6 +19,12 @@
 [[ "${_YB_OS_INCLUDED:-}" == "true" ]] && return 0
 _YB_OS_INCLUDED=true
 
+_src_dir="${BASH_SOURCE%/*}"
+if [[ ! -d "${_src_dir}" ]]; then _src_dir="$PWD"; fi
+# Needed for 'fatal'
+# shellcheck disable=SC1091,SC1090
+. "${_src_dir}"/logger.sh
+
 # -------------------------------------------------------------------------------------------------
 # functions
 # -------------------------------------------------------------------------------------------------

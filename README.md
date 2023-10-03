@@ -80,20 +80,60 @@ fi
 
 ## User-overridable variables
 
-The `yb_python_interpeter` variable should be set to the default Python interpreter of your
-project. It is prefereable to use Python 3 as Python 2.7 is going away in 2020,
-e.g. `yb_python_interpeter=python3`. However, as of 03/2019 the default value of
-`yb_python_interpeter` in this library is `python2.7`.
+`YB_VERBOSE`: This enables verbose logging, useful for debugging.
 
-## Functions
+`FAIL_ON_WARNING`: This causes `warn` messages from the `logger.sh` to become fatal instead.
 
-### `yb_activate_virtualenv`
+`YB_PYTHON_VERSION`: This defines which version of python to use.  It takes a python version number
+like `3` or `3.8`.  The default is `3` but you are encouraged to set this to something more specific
+for your own project.  If the specified version can't be found in $PATH the library exits with an
+error.
+
+`YB_BUILD_STRICT`: venv only. This tells `yb_activate_virtualenv` from `create_venv.sh` how strict
+it should be when evaluating the `requirements.txt`, `requrements_frozen.xt`, and python version
+changes from what was used to generate the `requrements_frozen.xt`.  If `YB_BUILD_STRICT` is true
+the following conditions all cause an immediate error exit:
+* `requirements.txt` is newer than `requirements_frozen.txt`
+* The in-use version of python is different than the version used to generate `requirements_frozen.txt`
+* The contents of `requirements.txt` has changed since `requirements_frozen.txt` was generated.
+* `requirements_frozen.txt` is missing the `YB_SHA` line
+* The venv exists but has changed
+
+If `YB_BUILD_STRICT` is false, the above conditions cause the venv to be refreshed or recreated as
+needed.
+
+`YB_RECREATE_VIRTUALENV`: Setting this to true will cause the venv to get recreated everytime even
+if no changes to the venv, python version, or requirements files are detected.  Default is false.
+
+`YB_PUT_VENV_IN_PROJECT_DIR`: When true (the default), the venv directory is placed next to the
+requirements.txt file.
+
+`YB_VENV_BASE_DIR`: Only takes effect when `YB_PUT_VENV_IN_PROJECT_DIR` is false.  This defines the
+root directory under which venvs should be placed.  The path to each venv under this root includes a
+unique SHA derived from the requirements.txt contents and python version.  This can help when
+switching between branches with different requirements.txt changes for the same project.  Default
+is `~/.venv/yb`
+
+## Functions and Modules
+
+### `create_venv.sh`
+
+`create_venv.sh` is both a standalone script and includable bash library.  Internally it makes use
+of the `logger.sh`, `os.sh`, and `detect_python.sh` modules.  When used as a standalone script,
+it simply calls `yb_activate_virtualenv` on the supplied argument (defaulting to the current
+directory if no argument was supplied).  It creates an empty venv using `YB_PYTHON_VERSION` if no
+requirements.txt is found.
+```bash
+# create a venv in the current directory.
+/path/to/yugabyte-bash-common/src/create_venv.sh
+```
+When sourced it provides the following global functions:
+
+#### `yb_activate_virtualenv`
 
 The `yb_activate_virtualenv` function takes one argument, the top-level directory containing
-a `requirements.txt` or a `requirements_frozen.txt` file, and creates a virtual env called
-`venv` in that directory in case it does not already exist. Then it installs Python module
-described by `requirements_frozen.txt` (if exists) or `requirements.txt` into that `venv`
-virtualenv.
+a `requirements.txt` or a `requirements_frozen.txt` file. It creates a virtual env according to
+the rules described above.
 
 For a repository containing just one top-level Python project it would usually be invoked
 like this from a `common.sh` script:
@@ -122,6 +162,24 @@ export PYTHONPATH=$my_project_root/python:$PYTHONPATH
 yb_activate_virtualenv "$my_project_root"
 . "$my_project_root/python/my_package/my_tool.py" "$@"
 ```
+
+### `detect_python.sh`
+This module looks for the first instance of a python executable that matches the version specified
+by `YB_PYTHON_VERSION` in $PATH and then sets `yb_python_interpreter` to that executable.  It also
+sets `py_major_version` and `yb_python_version_actual` with the major version and full version number
+respectively.  It provides a single function `run_python` that will pass whatever is provided to it
+as an argument for the `yb_python_interpreter`.  This makes no use of any venv that may exist and
+shouldn't be used from within one.
+
+### `os.sh`
+This module tries to detect some info about the host we are running on (linux or mac, linux
+distribution, core count) and provides some helper function for same (`is_linux()`, `is_mac()`,
+`is_rhel()`, etc).  Core count is exposed through the global variable `YB_NUM_CPUS`
+
+### `logger.sh`
+This modules provides a number of logging functions complete with colored output and timestamps.
+Please look in the module itself for the full list of available functions.  Most commonly useful
+will be `log`, `fatal`, and `yb::verbose_log`
 
 # Copyright
 

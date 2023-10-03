@@ -57,7 +57,7 @@ yb::verbose_log "Using ${yb_python_interpreter} (${yb_python_version_actual})"
 function yb::venv::text_file_sha_ignore_comments() {
   local file=$1
   local tmp
-  tmp="$(sort -u <<<"$(grep -Ev '^[[:space:]]*#' "${file}")")"
+  tmp="$(LC_COLLATE=C sort -u <<<"$(grep -Ev '^[[:space:]]*#' "${file}")")"
   # shellcheck disable=SC2154
   awk '{print $1}'<<<"$(${yb_sha256sum} <<<"${tmp}")"
 }
@@ -67,7 +67,9 @@ function yb::venv::needs_refreeze() {
   local frozen_file=$2
   if [[ -f "${frozen_file}" ]]; then
     if ! grep "# YB_SHA: ${reqs_sha}" "${frozen_file}" >/dev/null 2>&1; then
-      yb::verbose_log "Refreezing '${frozen_file}', missing YB_SHA"
+      yb::verbose_log "Refreezing '${frozen_file}', YB_SHA mismatch."
+      yb::verbose_log "New: # YB_SHA: ${reqs_sha}"
+      yb::verbose_log "Old: $(grep YB_SHA "${frozen_file}")"
       return 0
     fi
   else
@@ -113,6 +115,9 @@ function yb::venv::needs_refresh() {
       yb::verbose_log "Existing venv is current and will be used as is."
       return 1
     fi
+    yb::verbose_log "${venv_dir}/YB_VENV_SHA is most recent file but wrong value."
+    yb::verbose_log "New: ${unique_sha}"
+    yb::verbose_log "Old: $(cat "${venv_dir}/YB_VENV_SHA")"
   fi
   yb::verbose_log "The venv needs refreshing"
   return 0
@@ -154,12 +159,12 @@ function yb_activate_virtualenv() {
   # Include the OS and h/w arch.  This allows to use a VM or container with a shared persistent
   # externally mounted YB_VENV_BASE_DIR.
   local unique_input
-  unique_input="$(uname -s)$(uname -m)${yb_python_version_actual}"
+  unique_input="${yb_python_version_actual}"
   local refreeze=false
   if [[ -f "${reqs_file}" ]]; then
     local reqs_sha
     reqs_sha="$(yb::venv::text_file_sha_ignore_comments "${reqs_file}")"
-    unique_input="${unique_input}$(sort -u "${reqs_file}")"
+    unique_input="${unique_input}$(LC_COLLATE=C sort -u "${reqs_file}")"
     if yb::venv::needs_refreeze "${reqs_sha}" "${frozen_file}"; then
       if [[ "${YB_BUILD_STRICT}" == "true" ]]; then
         warn "YB_BUILD_STRICT: ${frozen_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
@@ -170,7 +175,7 @@ function yb_activate_virtualenv() {
       refreeze=true
     else
       reqs_file="${frozen_file}"
-      unique_input="${unique_input}$(sort -u "${frozen_file}")"
+      unique_input="${unique_input}$(LC_COLLATE=C sort -u "${frozen_file}")"
     fi
   else
     warn "WARNING: No requirements.txt file found in '${root_dir}'!"
@@ -200,7 +205,8 @@ function yb_activate_virtualenv() {
   fi
 
   # Remove the venv, we want to ensure it is fresh.
-  if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]] || yb::venv::venv_needs_recreation "${venv_dir}"; then
+  if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]] \
+        || yb::venv::venv_needs_recreation "${venv_dir}"; then
     rm -rf "${venv_dir}"
   fi
 
