@@ -324,7 +324,6 @@ check_virtualenv() {
 }
 
 yb_test_activate_virtualenv() {
-  check_virtualenv 2.7 "2([.][0-9]+)+" no_pip_upgrade expect_success psutil
   check_virtualenv 3 "3([.][0-9]+)+"   no_pip_upgrade expect_success requests
   check_virtualenv 3 "3([.][0-9]+)+"   upgrade_pip    expect_success codecheck
   check_virtualenv 3 "3([.][0-9]+)+"   upgrade_pip    expect_failure nosuchmodule
@@ -376,7 +375,6 @@ check_switching_virtualenv() {
 yb_test_switching_virtualenv() {
   declare -a modules
   modules=( requests numpy )
-  check_switching_virtualenv 2.7 "${modules[@]}"
   check_switching_virtualenv 3 "${modules[@]}"
 }
 
