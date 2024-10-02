@@ -165,7 +165,7 @@ log() {
   local stack_idx1=$(( stack_idx0 + 1 ))
 
   # shellcheck disable=SC2048,SC2086
-  echo "[$( get_timestamp )" \
+  echo -e "[$( get_timestamp )" \
        "${BASH_SOURCE[$stack_idx1]##*/}:${BASH_LINENO[$stack_idx0]}" \
        "${FUNCNAME[$stack_idx1]}]" $* >&2
 }
