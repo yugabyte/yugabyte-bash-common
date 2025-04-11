@@ -348,11 +348,15 @@ check_switching_virtualenv() {
   local pip_list_deactivated_output_path=$venv_parent_dir2/pip_list_deactivated.txt
   local python_interpreter_path_file1=$venv_parent_dir1/python_interpreter_path.txt
   local python_interpreter_path_file2=$venv_parent_dir2/python_interpreter_path.txt
+  local python_interpreter_path_deactivated=$venv_parent_dir2/python_deactivated_path.txt
+  local python_interpreter_path_initial=$venv_parent_dir2/python_initial_path.tx
+
 
   (
     export YB_USE_TOP_LEVEL_VENV=true
     export YB_PYTHON_VERSION=${python_interpreter}
     . "./src/create_venv.sh"
+    command -v python > "$python_interpreter_path_initial"
     yb_activate_virtualenv "$venv_parent_dir1"
     pip list >"$pip_list_output_path1"
     command -v python >"$python_interpreter_path_file1"
@@ -363,13 +367,14 @@ check_switching_virtualenv() {
 
     yb_deactivate_virtualenv
     pip list >"$pip_list_deactivated_output_path"
+    command -v python >"$python_interpreter_path_deactivated"
   )
 
   for requirement in "$@"; do
     assert_egrep_no_results "^${requirement}[[:space:]]" "$pip_list_output_path1"
     assert_egrep "^${requirement}[[:space:]]" "$pip_list_output_path2"
-    assert_egrep_no_results "^${requirement}[[:space:]]" "$pip_list_deactivated_output_path"
   done
+  assert_equals "$(<$python_interpreter_path_initial)" "$(<$python_interpreter_path_deactivated)"
 }
 
 yb_test_switching_virtualenv() {
