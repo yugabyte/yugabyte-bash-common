@@ -148,18 +148,15 @@ function yb::venv::create() {
       create_cmd="${yb_python_interpreter} -m venv"
       ;;
     *)
-      warn "Error determining venv creation command"
-      warn "Unknown python major version: '${py_major_version}'"
-      return 1
+      fatal "Error determining venv creation command \
+        Unknown python major version: '${py_major_version}'"
       ;;
   esac
   if ! mkdir -p "$(dirname "${venv_dir}")"; then
-    warn "Error creating venv parent directory"
-    return 1
+    fatal "Error creating venv parent directory '$(dirname "${venv_dir}")'"
   fi
   if ! ${create_cmd} "${venv_dir}"; then
-    warn "Error creating venv!"
-    return 1
+    fatal "Error creating venv directory at '${venv_dir}'"
   fi
 }
 
@@ -326,7 +323,7 @@ function yb_freeze_virtualenv() {
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
-  if [[ ${1:-} == "freeze" ]]; then
+  if [[ ${1:-} == "--freeze" ]]; then
     venv_dir="${2:-$(pwd)}"
     yb_freeze_virtualenv "${venv_dir}" || exit 1
     log "The requirements.txt file has been frozen to requirements_frozen.txt in ${venv_dir}."
