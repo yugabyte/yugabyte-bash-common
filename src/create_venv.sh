@@ -69,25 +69,28 @@ function yb::venv::text_file_sha_ignore_comments() {
 function yb::venv::needs_refreeze() {
   local reqs_sha=$1
   local frozen_file=$2
+  local return_value=1
   if [[ -f "${frozen_file}" ]]; then
     if ! grep "# YB_SHA: ${reqs_sha}" "${frozen_file}" >/dev/null 2>&1; then
-      yb::verbose_log "Refreezing '${frozen_file}', YB_SHA mismatch."
+      yb::verbose_log "Frozen file '${frozen_file}' needs refreezing, YB_SHA mismatch."
       yb::verbose_log "New: # YB_SHA: ${reqs_sha}"
       yb::verbose_log "Old: $(grep YB_SHA "${frozen_file}")"
-      return 0
+      return_value=0
     fi
     if ! grep "# YB_PYTHON_VERSION: ${YB_PYTHON_VERSION}" "${frozen_file}" >/dev/null 2>&1; then
-      yb::verbose_log "Refreezing '${frozen_file}', YB_PYTHON_VERSION mismatch."
+      yb::verbose_log "Frozen file '${frozen_file}' needs refreezing, YB_PYTHON_VERSION mismatch."
       yb::verbose_log "New: # YB_PYTHON_VERSION: ${YB_PYTHON_VERSION}"
       yb::verbose_log "Old: $(grep YB_PYTHON_VERSION "${frozen_file}")"
-      return 0
+      return_value=0
     fi
   else
-    yb::verbose_log "Frozen file doesn't exist at '${frozen_file}', refreezing"
-    return 0
+    yb::verbose_log "Frozen file doesn't exist at '${frozen_file}', should be generated."
+    return_value=0
   fi
-  yb::verbose_log "Frozen file is up to date"
-  return 1
+  if [[ $return_value -eq 1 ]]; then
+    yb::verbose_log "Frozen file is up to date"
+  fi
+  return $return_value
 }
 
 # Recreate the venv if the python if it was created with a different version of python.
