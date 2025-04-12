@@ -167,6 +167,9 @@ function yb::venv::create() {
 function yb::venv::freeze() {
   local reqs_file
   reqs_file=$(realpath "$1")
+  if [[ ! -f "$reqs_file" ]]; then
+    fatal "Cannot freeze: '${reqs_file}' does not exist"
+  fi
   local frozen_file
   frozen_file=$(realpath "$2")
   local unique_sha
@@ -324,8 +327,9 @@ function yb_freeze_virtualenv() {
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   if [[ ${1:-} == "freeze" ]]; then
-    yb_freeze_virtualenv "${2:-$(pwd)}" || exit 1
-    log "The requirements have been frozen."
+    venv_dir="${2:-$(pwd)}"
+    yb_freeze_virtualenv "${venv_dir}" || exit 1
+    log "The requirements.txt file has been frozen to requirements_frozen.txt in ${venv_dir}."
   else
     yb_activate_virtualenv "${1:-$(pwd)}" || exit 1
     log "To use this venv run the following: source '${VIRTUAL_ENV}/bin/activate'"
