@@ -20,6 +20,15 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   exit 1
 fi
 
+run_venv_aware_python() {
+  if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+    ## We are in a virtual env so just call `python`
+    python "$@"
+  else
+    run_python "$@"
+  fi
+}
+
 run_python() {
   "$yb_python_interpreter" "$@"
 }

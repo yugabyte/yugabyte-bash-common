@@ -57,7 +57,11 @@ yb::verbose_log "Using ${yb_python_interpreter} (${yb_python_version_actual})"
 function yb::venv::text_file_sha_ignore_comments() {
   local file=$1
   local tmp
-  tmp="$(LC_COLLATE=C sort -u <<<"$(grep -Ev '^[[:space:]]*#' "${file}")")"
+  if [[ -f "${file}" ]]; then
+    tmp="$(LC_COLLATE=C sort -u <<<"$(grep -Ev '^[[:space:]]*#' "${file}")")"
+  else
+    tmp=""
+  fi
   # shellcheck disable=SC2154
   awk '{print $1}'<<<"$(${yb_sha256sum} <<<"${tmp}")"
 }
@@ -65,19 +69,28 @@ function yb::venv::text_file_sha_ignore_comments() {
 function yb::venv::needs_refreeze() {
   local reqs_sha=$1
   local frozen_file=$2
+  local return_value=1
   if [[ -f "${frozen_file}" ]]; then
     if ! grep "# YB_SHA: ${reqs_sha}" "${frozen_file}" >/dev/null 2>&1; then
-      yb::verbose_log "Refreezing '${frozen_file}', YB_SHA mismatch."
+      yb::verbose_log "Frozen file '${frozen_file}' needs refreezing, YB_SHA mismatch."
       yb::verbose_log "New: # YB_SHA: ${reqs_sha}"
       yb::verbose_log "Old: $(grep YB_SHA "${frozen_file}")"
-      return 0
+      return_value=0
+    fi
+    if ! grep "# YB_PYTHON_VERSION: ${YB_PYTHON_VERSION}" "${frozen_file}" >/dev/null 2>&1; then
+      yb::verbose_log "Frozen file '${frozen_file}' needs refreezing, YB_PYTHON_VERSION mismatch."
+      yb::verbose_log "New: # YB_PYTHON_VERSION: ${YB_PYTHON_VERSION}"
+      yb::verbose_log "Old: $(grep YB_PYTHON_VERSION "${frozen_file}")"
+      return_value=0
     fi
   else
-    yb::verbose_log "Frozen file doesn't exist at '${frozen_file}', refreezing"
-    return 0
+    yb::verbose_log "Frozen file doesn't exist at '${frozen_file}', should be generated."
+    return_value=0
   fi
-  yb::verbose_log "Frozen file is up to date"
-  return 1
+  if [[ $return_value -eq 1 ]]; then
+    yb::verbose_log "Frozen file is up to date"
+  fi
+  return $return_value
 }
 
 # Recreate the venv if the python if it was created with a different version of python.
@@ -123,6 +136,66 @@ function yb::venv::needs_refresh() {
   return 0
 }
 
+
+function yb::venv::create() {
+  local venv_dir=$1
+  local create_cmd=''
+  log "Creating venv at '${venv_dir}'"
+  # shellcheck disable=SC2154
+  case "${py_major_version}" in
+    2) # python2 instalations don't always include pip.
+      "${yb_python_interpreter}" -m pip install virtualenv --user >/dev/null 2>&1
+      create_cmd="${yb_python_interpreter} -m virtualenv"
+      ;;
+    3)
+      create_cmd="${yb_python_interpreter} -m venv"
+      ;;
+    *)
+      fatal "Error determining venv creation command \
+        Unknown python major version: '${py_major_version}'"
+      ;;
+  esac
+  if ! mkdir -p "$(dirname "${venv_dir}")"; then
+    fatal "Error creating venv parent directory '$(dirname "${venv_dir}")'"
+  fi
+  if ! ${create_cmd} "${venv_dir}"; then
+    fatal "Error creating venv directory at '${venv_dir}'"
+  fi
+}
+
+
+function yb::venv::freeze() {
+  local reqs_file
+  reqs_file=$(realpath "$1")
+  if [[ ! -f "$reqs_file" ]]; then
+    fatal "Cannot freeze: '${reqs_file}' does not exist"
+  fi
+  local frozen_file
+  frozen_file=$(realpath "$2")
+  local unique_sha
+  local freeze_dir
+  freeze_dir=$(mktemp -d -t freeze_venvXXXXX)
+  # shellcheck disable=SC2064
+  trap "rm -rf '${freeze_dir}'" EXIT
+  log "Freezing requirements file '${reqs_file}' to '${frozen_file}'\
+    using python ${yb_python_version_actual}"
+  (
+    cd "${freeze_dir}"
+    cp "${reqs_file}" ./
+    yb::venv::create "${freeze_dir}/venv"
+    # shellcheck source=/dev/null
+    source "${freeze_dir}/venv/bin/activate"
+    trap "deactivate" RETURN
+    unique_sha=$(yb::venv::text_file_sha_ignore_comments "${reqs_file}")
+    pip install -r "${reqs_file}"
+    yb::verbose_log "Recreating ${frozen_file}"
+    echo "# YB_SHA: ${unique_sha}" > "${frozen_file}"
+    echo "# YB_PYTHON_VERSION: ${yb_python_version_actual}" >> "${frozen_file}"
+    pip freeze -q >> "${frozen_file}"
+  )
+}
+
+
 # -------------------------------------------------------------------------------------------------
 # Main functions
 # -------------------------------------------------------------------------------------------------
@@ -145,43 +218,48 @@ function yb_activate_virtualenv() {
   # Expand the path here, we don't want it to be ".".
   local root_dir
   root_dir=$(realpath "${1}")
-  local reqs_file="${root_dir}/requirements.txt"
-  local frozen_file="${root_dir}/requirements_frozen.txt"
-
   # Allow the caller to optionally pass in a venv path to use instead of trying to calculate it.
   # Used in https://github.com/yugabyte/yugabyte-db/blob/master/yb_build.sh.
-  local venv_dir=${2:-}
-  # By default we create a directory called 'venv' in the same directory that contains the 
-  # requirements.txt file.
-  # By setting YB_PUT_VENV_IN_PROJECT_DIR=false, a unique VENV dir based on a combination of python
-  # version, OS, arch, and the non-comment contents of the requirements_frozen.txt file (or 
-  # requirements.txt if there is no frozen file).
-  # Include the OS and h/w arch.  This allows to use a VM or container with a shared persistent
-  # externally mounted YB_VENV_BASE_DIR.
+  local venv_dir
+  venv_dir=${2:-}
+
+  local reqs_file
+  reqs_file="${root_dir}/requirements.txt"
+  local frozen_file
+  frozen_file="${root_dir}/requirements_frozen.txt"
+  local file_of_record
+
   local unique_input
-  unique_input="${yb_python_version_actual}"
-  local refreeze=false
-  if [[ -f "${reqs_file}" ]]; then
-    local reqs_sha
-    reqs_sha="$(yb::venv::text_file_sha_ignore_comments "${reqs_file}")"
+  unique_input=$YB_PYTHON_VERSION
+  local reqs_sha
+  local unique_sha
+
+  if [[ ! -f "${reqs_file}" ]] && [[ ! -f "${frozen_file}" ]]; then
+    warn "No requirements files found, resulting venv will be empty"
+  elif [[ -f "${reqs_file}" ]] && [[ ! -f "${frozen_file}" ]]; then
+    warn "No frozen requirements file found."
+    warn "The created venv will be non-deterministic"
+    file_of_record="${reqs_file}"
     unique_input="${unique_input}$(LC_COLLATE=C sort -u "${reqs_file}")"
+  elif [[ ! -f "${reqs_file}" ]] && [[ -f "${frozen_file}" ]]; then
+    warn "Only the frozen requirements file is present."
+    warn "refreezing won't be available"
+    file_of_record="${frozen_file}"
+    unique_input="${unique_input}$(LC_COLLATE=C sort -u "${frozen_file}")"
+  else
+    unique_input="${unique_input}$(LC_COLLATE=C sort -u "${reqs_file}")"
+    unique_input="${unique_input}$(LC_COLLATE=C sort -u "${frozen_file}")"
+    reqs_sha="$(yb::venv::text_file_sha_ignore_comments "${reqs_file}")"
     if yb::venv::needs_refreeze "${reqs_sha}" "${frozen_file}"; then
       if [[ "${YB_BUILD_STRICT}" == "true" ]]; then
-        warn "YB_BUILD_STRICT: ${frozen_file} is out of date or doesn't exist and YB_BUILD_STRICT is true"
-        # shellcheck disable=SC2046
-        return 1
+        fatal "YB_BUILD_STRICT: ${frozen_file} is out of date and YB_BUILD_STRICT is true"
       fi
-      yb::verbose_log "Setting refreeze to true"
-      refreeze=true
-    else
-      reqs_file="${frozen_file}"
-      unique_input="${unique_input}$(LC_COLLATE=C sort -u "${frozen_file}")"
+      warn "requirements_frozen.txt is out of date and needs to be regenerated."
+      warn "There may be subtle (and not so subtle) errors until this is done."
     fi
-  else
-    warn "WARNING: No requirements.txt file found in '${root_dir}'!"
+    file_of_record="${frozen_file}"
   fi
 
-  local unique_sha
   unique_sha=$(${yb_sha256sum} - <<<"${unique_input}"| awk '{print $1}')
 
   if [[ -z $venv_dir ]]; then
@@ -197,13 +275,6 @@ function yb_activate_virtualenv() {
   yb::verbose_log "Using reqs_file=${reqs_file}"
   yb::verbose_log "Using venv_dir=${venv_dir}"
 
-  if ! ${YB_PUT_VENV_IN_PROJECT_DIR}; then
-    if ! mkdir -p "${YB_VENV_BASE_DIR}"; then
-      warn "Error creating YB_VENV_BASE_DIR '${YB_VENV_BASE_DIR}'"
-      return 1
-    fi
-  fi
-
   # Remove the venv, we want to ensure it is fresh.
   if [[ "${YB_RECREATE_VIRTUALENV}" == 'true' ]] \
         || yb::venv::venv_needs_recreation "${venv_dir}"; then
@@ -214,27 +285,7 @@ function yb_activate_virtualenv() {
   if [[ -d ${venv_dir} ]]; then
     yb::verbose_log "Using existing venv"
   else
-    yb::verbose_log "Creating new venv"
-    local create_cmd=''
-    # shellcheck disable=SC2154
-    case "${py_major_version}" in
-      2) # python2 instalations don't always include pip.
-        "${yb_python_interpreter}" -m pip install virtualenv --user >/dev/null 2>&1
-        create_cmd="${yb_python_interpreter} -m virtualenv"
-        ;;
-      3)
-        create_cmd="${yb_python_interpreter} -m venv"
-        ;;
-      *)
-        warn "Error determining venv creation command"
-        warn "Unknown python major version: '${py_major_version}'"
-        return 1
-        ;;
-    esac
-    if ! ${create_cmd} "${venv_dir}"; then
-      warn "Error creating venv!"
-      return 1
-    fi
+    yb::venv::create "${venv_dir}"
   fi
 
   # shellcheck source=/dev/null
@@ -250,10 +301,10 @@ function yb_activate_virtualenv() {
       # shellcheck disable=SC2046
       return 1
     fi
-    if [[ -f "${reqs_file}" ]]; then
-      yb::verbose_log "Installing ${reqs_file}"
-      if ! out=$(pip install -r "${reqs_file}" 2>&1); then
-        warn "Error installing requirements from ${reqs_file}!\n${out}"
+    if [[ -f "${file_of_record:-}" ]]; then
+      yb::verbose_log "Installing ${file_of_record}"
+      if ! out=$(pip install -r "${file_of_record}" 2>&1); then
+        warn "Error installing requirements from ${file_of_record}!\n${out}"
         # shellcheck disable=SC2046
         return 1
       fi
@@ -262,16 +313,24 @@ function yb_activate_virtualenv() {
     echo "${unique_sha}" > "${venv_dir}/YB_VENV_SHA"
 
     yb::verbose_log "${out}"
-
-    if [[ "${refreeze}" == "true" ]]; then
-      yb::verbose_log "Recreating ${frozen_file}"
-      echo "# YB_SHA: ${reqs_sha}" > "${frozen_file}"
-      pip freeze >> "${frozen_file}"
-    fi
   fi
 }
 
+function yb_freeze_virtualenv() {
+  local root_dir
+  root_dir=$(realpath "${1}")
+  local reqs_file="${root_dir}/requirements.txt"
+  local frozen_file="${root_dir}/requirements_frozen.txt"
+  yb::venv::freeze "${reqs_file}" "${frozen_file}"
+}
+
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
-  yb_activate_virtualenv "${1:-$(pwd)}" || exit 1
-  log "To use this venv run the following: source '${VIRTUAL_ENV}/bin/activate'"
+  if [[ ${1:-} == "--freeze" ]]; then
+    venv_dir="${2:-$(pwd)}"
+    yb_freeze_virtualenv "${venv_dir}" || exit 1
+    log "The requirements.txt file has been frozen to requirements_frozen.txt in ${venv_dir}."
+  else
+    yb_activate_virtualenv "${1:-$(pwd)}" || exit 1
+    log "To use this venv run the following: source '${VIRTUAL_ENV}/bin/activate'"
+  fi
 fi
