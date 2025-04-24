@@ -97,12 +97,21 @@ function yb::venv::needs_refreeze() {
 function yb::venv::venv_needs_recreation() {
   local venv_dir=$1
   # shellcheck disable=SC1091,SC1090
-  [[ -f "${venv_dir}/bin/activate" ]] \
-    && [[ "$(run_python --version)" != "$(source "${venv_dir}/bin/activate" && python --version)" ]]
+  if [[ ! -f "${venv_dir}/bin/activate" ]]; then
+    yb::verbose_log "bin/activate missing from venv directory '${venv_dir}', recreating"
+    return 0
+  fi
+  # shellcheck disable=SC1091,SC1090
+  if [[ "$(run_python --version)" != "$(source "${venv_dir}/bin/activate" && python --version)" ]];
+  then
+    yb::verbose_log "venv dir ${venv_dir} has the wrong python version, recreating"
+    return 0
+  fi
+  return 1
 }
 
 
-# This returns true if venv is generally usable but maybe not be up to date
+# This returns true if venv is generally usable but maybe not up to date
 # e.g. a new module has been installed since creation.
 function yb::venv::needs_refresh() {
   local venv_dir=$1
@@ -174,17 +183,15 @@ function yb::venv::freeze() {
   frozen_file=$(realpath "$2")
   local unique_sha
   local freeze_dir
-  freeze_dir=$(mktemp -d -t freeze_venvXXXXX)
+  freeze_dir=$(mktemp -u -t -p "$(dirname "$3")" freeze_venvXXXXX)
   # shellcheck disable=SC2064
   trap "rm -rf '${freeze_dir}'" EXIT
   log "Freezing requirements file '${reqs_file}' to '${frozen_file}'\
     using python ${yb_python_version_actual}"
   (
-    cd "${freeze_dir}"
-    cp "${reqs_file}" ./
-    yb::venv::create "${freeze_dir}/venv"
+    yb::venv::create "${freeze_dir}"
     # shellcheck source=/dev/null
-    source "${freeze_dir}/venv/bin/activate"
+    source "${freeze_dir}/bin/activate"
     trap "deactivate" RETURN
     unique_sha=$(yb::venv::text_file_sha_ignore_comments "${reqs_file}")
     pip install -r "${reqs_file}"
@@ -319,16 +326,19 @@ function yb_activate_virtualenv() {
 function yb_freeze_virtualenv() {
   local root_dir
   root_dir=$(realpath "${1}")
+  local venv_dir
+  venv_dir=${2:-$root_dir/venv}
   local reqs_file="${root_dir}/requirements.txt"
   local frozen_file="${root_dir}/requirements_frozen.txt"
-  yb::venv::freeze "${reqs_file}" "${frozen_file}"
+  yb::venv::freeze "${reqs_file}" "${frozen_file}" "${venv_dir}"
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   if [[ ${1:-} == "--freeze" ]]; then
-    venv_dir="${2:-$(pwd)}"
-    yb_freeze_virtualenv "${venv_dir}" || exit 1
-    log "The requirements.txt file has been frozen to requirements_frozen.txt in ${venv_dir}."
+    root_dir="${2:-$(pwd)}"
+    venv_dir="${3:-$root_dir/venv}"
+    yb_freeze_virtualenv "$root_dir" "${venv_dir}" || exit 1
+    log "The requirements.txt file has been frozen to requirements_frozen.txt in ${root_dir}."
   else
     yb_activate_virtualenv "${1:-$(pwd)}" || exit 1
     log "To use this venv run the following: source '${VIRTUAL_ENV}/bin/activate'"
