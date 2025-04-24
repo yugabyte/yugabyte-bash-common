@@ -82,9 +82,16 @@ get_timestamp_for_filenames() {
 function yb::verbose_log() {
   # Print our info messages to stderr and only when asked (YB_VERBOSE=true).
   local msg="$*"
-  if [[ ${YB_VERBOSE} == "true" ]]; then
-    echo -e "${msg}" >&2
+  if [[ ${YB_VERBOSE} != "true" ]]; then
+    return
   fi
+  local stack_idx0=${yb_log_skip_top_frames:-0}
+  local stack_idx1=$(( stack_idx0 + 1 ))
+
+  # shellcheck disable=SC2048,SC2086
+  echo -e "[$( get_timestamp )" \
+       "${BASH_SOURCE[$stack_idx1]##*/}:${BASH_LINENO[$stack_idx0]}" \
+       "${FUNCNAME[$stack_idx1]}]" "${msg}" >&2
 }
 
 print_stack_trace() {
