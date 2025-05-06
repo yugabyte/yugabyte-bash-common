@@ -175,12 +175,12 @@ function yb::venv::create() {
 
 function yb::venv::freeze() {
   local reqs_file
-  reqs_file="$(realpath  $(dirname "$1"))/$(basename "$1")"
+  reqs_file="$(realpath "$(dirname "$1")")/$(basename "$1")"
   if [[ ! -f "$reqs_file" ]]; then
     fatal "Cannot freeze: '${reqs_file}' does not exist"
   fi
   local frozen_file
-  frozen_file="$(realpath  $(dirname "$2"))/$(basename "$2")"
+  frozen_file="$(realpath "$(dirname "$2")")/$(basename "$2")"
   local unique_sha
   local freeze_dir
   freeze_dir=$(mktemp -u -p "$(dirname "$3")" -t freeze_venvXXXXX)
