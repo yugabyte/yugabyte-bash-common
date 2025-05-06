@@ -175,25 +175,27 @@ function yb::venv::create() {
 
 function yb::venv::freeze() {
   local reqs_file
-  reqs_file=$(realpath "$1")
+  reqs_file="$(realpath  $(dirname "$1"))/$(basename "$1")"
   if [[ ! -f "$reqs_file" ]]; then
     fatal "Cannot freeze: '${reqs_file}' does not exist"
   fi
   local frozen_file
-  frozen_file=$(realpath "$2")
+  frozen_file="$(realpath  $(dirname "$2"))/$(basename "$2")"
   local unique_sha
   local freeze_dir
-  freeze_dir=$(mktemp -u -t -p "$(dirname "$3")" freeze_venvXXXXX)
+  freeze_dir=$(mktemp -u -p "$(dirname "$3")" -t freeze_venvXXXXX)
   # shellcheck disable=SC2064
   trap "rm -rf '${freeze_dir}'" EXIT
   log "Freezing requirements file '${reqs_file}' to '${frozen_file}'\
     using python ${yb_python_version_actual}"
   (
+    set -e
     yb::venv::create "${freeze_dir}"
     # shellcheck source=/dev/null
     source "${freeze_dir}/bin/activate"
     trap "deactivate" RETURN
     unique_sha=$(yb::venv::text_file_sha_ignore_comments "${reqs_file}")
+    pip install --upgrade pip
     pip install -r "${reqs_file}"
     yb::verbose_log "Recreating ${frozen_file}"
     echo "# YB_SHA: ${unique_sha}" > "${frozen_file}"
