@@ -25,9 +25,6 @@ YB_VERBOSE=${YB_VERBOSE:-false}
 # Global variables defined in this module
 # -------------------------------------------------------------------------------------------------
 # shellcheck disable=SC2034,SC2155
-readonly YB_BASH_COMMON_ROOT=$( cd "${BASH_SOURCE/*}" && cd .. && pwd )
-
-# shellcheck disable=SC2034,SC2155
 readonly YELLOW_COLOR="\033[0;33m"
 
 # shellcheck disable=SC2034,SC2155
